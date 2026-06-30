@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="학생 진도">
+  <title>학생별 책 진도관리</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icon.svg">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Student Progress</p>
+        <h1>학생별 책 진도관리</h1>
+      </div>
+      <div class="top-actions">
+        <button class="icon-button" id="exportJsonBtn" title="데이터 내보내기" aria-label="데이터 내보내기"><span aria-hidden="true">↓</span></button>
+        <label class="icon-button" for="importJsonInput" title="데이터 가져오기" aria-label="데이터 가져오기"><span aria-hidden="true">↑</span></label>
+        <input id="importJsonInput" type="file" accept="application/json,.json" hidden>
+      </div>
+    </header>
+    <nav class="tabs" aria-label="주요 화면">
+      <button class="tab active" data-tab="dashboard">요약</button>
+      <button class="tab" data-tab="alerts">알림</button>
+      <button class="tab" data-tab="students">학생</button>
+      <button class="tab" data-tab="detail">학생 상세</button>
+      <button class="tab" data-tab="teachers">선생님</button>
+      <button class="tab" data-tab="books">책</button>
+      <button class="tab" data-tab="assignments">책 배정</button>
+      <button class="tab" data-tab="progress">진도 체크</button>
+      <button class="tab" data-tab="homework">숙제</button>
+      <button class="tab" data-tab="quick">빠른 체크</button>
+      <button class="tab" data-tab="ai">AI 평가</button>
+      <button class="tab" data-tab="data">데이터</button>
+    </nav>
+    <main id="view" class="view" aria-live="polite"></main>
+  </div>
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "name": "학생별 책 진도관리",
+  "short_name": "학생 진도",
+  "description": "학생, 책, 단원 진도, 숙제, 평가를 관리하는 선생님용 앱",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f7f9",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
