@@ -20,6 +20,14 @@
     alertsTeacherId: 'all',
     detailTeacherId: 'all',
     detailStudentId: null,
+    consultTeacherId: 'all',
+    consultStartDate: '',
+    consultWeeks: 4,
+    consultStartTime: '14:00',
+    consultInterval: 20,
+    consultMaxPerDay: 6,
+    consultDraft: [],
+    consultConflicts: [],
     homeworkTeacherId: 'all',
     homeworkStudentId: 'all',
     homeworkStatus: 'all',
@@ -47,20 +55,24 @@
     for (var i = 1; i <= 35; i += 1) students.push({ id: 'stu-' + i, name: '학생 ' + String(i).padStart(2, '0'), status: '재원', teacherId: '', teacherIds: [], memo: '' });
     var counts = [12, 10, 8, 15, 6];
     var books = counts.map(function (unitCount, index) { return { id: 'book-' + (index + 1), name: '책 ' + String(index + 1).padStart(2, '0'), unitCount: unitCount, memo: '책 이름과 단원 수를 실제 값으로 바꾸세요' }; });
-    return { version: 4, teachers: [], students: students, books: books, assignments: [], progress: {}, homework: [], consultations: [], evaluations: [] };
+    return { version: 5, teachers: [], students: students, books: books, assignments: [], progress: {}, homework: [], consultations: [], consultationSettings: {}, consultationSchedule: [], evaluations: [] };
   }
 
   function normalizeState(data) {
     if (!data || !data.students || !data.books || !data.assignments || !data.progress) return seedState();
-    data.version = Math.max(Number(data.version || 1), 4);
+    data.version = Math.max(Number(data.version || 1), 5);
     data.teachers = Array.isArray(data.teachers) ? data.teachers : [];
     data.homework = Array.isArray(data.homework) ? data.homework : [];
     data.consultations = Array.isArray(data.consultations) ? data.consultations : [];
+    data.consultationSettings = data.consultationSettings && typeof data.consultationSettings === 'object' ? data.consultationSettings : {};
+    data.consultationSchedule = Array.isArray(data.consultationSchedule) ? data.consultationSchedule : [];
     data.evaluations = Array.isArray(data.evaluations) ? data.evaluations : [];
     data.students.forEach(function (student) { normalizeStudentTeachers(student); });
+    data.students.forEach(function (student) { data.consultationSettings[student.id] = normalizeConsultationSetting(data.consultationSettings[student.id], student); });
     data.teachers.forEach(function (teacher) { if (teacher.memo == null) teacher.memo = ''; });
     data.homework.forEach(function (item) { var ids = normalizeTeacherIdList(item.teacherIds); if (!ids.length && item.teacherId) ids = normalizeTeacherIdList(item.teacherId); if (item.status == null) item.status = 'todo'; if (item.memo == null) item.memo = ''; if (item.createdAt == null) item.createdAt = new Date().toISOString(); item.teacherIds = ids; item.teacherId = ids[0] || ''; });
     data.consultations.forEach(function (item) { var ids = normalizeTeacherIdList(item.teacherIds); if (!ids.length && item.teacherId) ids = normalizeTeacherIdList(item.teacherId); if (item.type == null) item.type = '상담 메모'; if (item.date == null) item.date = new Date().toISOString().slice(0, 10); item.teacherIds = ids; item.teacherId = ids[0] || ''; });
+    data.consultationSchedule.forEach(function (item) { var student = data.students.find(function (s) { return s.id === item.studentId; }); var ids = normalizeTeacherIdList(item.teacherIds); if (!ids.length && item.teacherId) ids = normalizeTeacherIdList(item.teacherId); if (!ids.length && student) ids = studentTeacherIds(student); item.teacherIds = ids; item.teacherId = ids[0] || ''; if (item.status == null) item.status = 'scheduled'; if (item.duration == null) item.duration = 20; if (item.memo == null) item.memo = ''; if (item.createdAt == null) item.createdAt = new Date().toISOString(); });
     data.evaluations.forEach(function (item) { var ids = normalizeTeacherIdList(item.teacherIds); if (!ids.length && item.teacherId) ids = normalizeTeacherIdList(item.teacherId); item.teacherIds = ids; item.teacherId = ids[0] || ''; });
     return data;
   }
@@ -371,6 +383,126 @@
 
   function bookOptions(selectedId, includeAll) { var all = includeAll ? '<option value="all">전체 책</option>' : ''; return all + state.books.map(function (b) { return '<option value="' + b.id + '" ' + (selectedId === b.id ? 'selected' : '') + '>' + escapeHtml(b.name) + '</option>'; }).join(''); }
 
+  var CONSULT_WEEKDAYS = [
+    { value: 1, label: '월' },
+    { value: 2, label: '화' },
+    { value: 3, label: '수' },
+    { value: 4, label: '목' },
+    { value: 5, label: '금' },
+    { value: 6, label: '토' },
+    { value: 0, label: '일' }
+  ];
+
+  function normalizeWeekdays(days) {
+    var raw = Array.isArray(days) ? days : [];
+    var seen = {};
+    return raw.map(function (day) { return Number(day); }).filter(function (day) {
+      if (Number.isNaN(day) || day < 0 || day > 6 || seen[day]) return false;
+      seen[day] = true;
+      return true;
+    });
+  }
+
+  function normalizeConsultationSetting(setting, student) {
+    setting = setting && typeof setting === 'object' ? setting : {};
+    var teacherIds = studentTeacherIds(student);
+    return {
+      enabled: setting.enabled !== false,
+      cycle: ['weekly','biweekly','monthly','as-needed'].indexOf(setting.cycle) !== -1 ? setting.cycle : 'monthly',
+      weekdays: normalizeWeekdays(setting.weekdays).length ? normalizeWeekdays(setting.weekdays) : [1, 2, 3, 4, 5],
+      teacherId: setting.teacherId && teacherIds.indexOf(setting.teacherId) !== -1 ? setting.teacherId : (teacherIds[0] || ''),
+      priority: setting.priority === 'high' ? 'high' : 'normal',
+      preferredTime: String(setting.preferredTime || '').trim(),
+      memo: String(setting.memo || '').trim()
+    };
+  }
+
+  function consultationSetting(studentId) {
+    var student = getStudent(studentId);
+    state.consultationSettings = state.consultationSettings || {};
+    state.consultationSettings[studentId] = normalizeConsultationSetting(state.consultationSettings[studentId], student);
+    return state.consultationSettings[studentId];
+  }
+
+  function consultationCycleLabel(cycle) {
+    return ({ weekly: '매주', biweekly: '2주마다', monthly: '월 1회', 'as-needed': '필요 시' })[cycle] || '월 1회';
+  }
+
+  function consultationCycleOptions(selected) {
+    return ['weekly','biweekly','monthly','as-needed'].map(function (cycle) {
+      return '<option value="' + cycle + '" ' + (selected === cycle ? 'selected' : '') + '>' + consultationCycleLabel(cycle) + '</option>';
+    }).join('');
+  }
+
+  function consultationStatusLabel(status) {
+    return ({ scheduled: '예정', done: '완료', canceled: '취소' })[status] || '예정';
+  }
+
+  function consultationStatusOptions(selected) {
+    return ['scheduled','done','canceled'].map(function (status) {
+      return '<option value="' + status + '" ' + (selected === status ? 'selected' : '') + '>' + consultationStatusLabel(status) + '</option>';
+    }).join('');
+  }
+
+  function consultationPriorityLabel(priority) {
+    return priority === 'high' ? '높음' : '보통';
+  }
+
+  function weekdayLabels(days) {
+    var normalized = normalizeWeekdays(days);
+    return CONSULT_WEEKDAYS.filter(function (day) { return normalized.indexOf(day.value) !== -1; }).map(function (day) { return day.label; }).join(', ');
+  }
+
+  function consultationCycleDays(cycle) {
+    return ({ weekly: 7, biweekly: 14, monthly: 28 })[cycle] || 0;
+  }
+
+  function addDays(dateString, days) {
+    var date = parseDateValue(dateString || todayString()) || new Date();
+    date.setDate(date.getDate() + Number(days || 0));
+    return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+  }
+
+  function compareDates(a, b) {
+    return String(a || '').localeCompare(String(b || ''));
+  }
+
+  function latestConsultationDate(studentId) {
+    var dates = [];
+    consultationsForStudent(studentId).forEach(function (item) { if (item.date) dates.push(item.date); });
+    (state.consultationSchedule || []).forEach(function (item) {
+      if (item.studentId === studentId && item.status === 'done' && item.date) dates.push(item.date);
+    });
+    return dates.sort().pop() || '';
+  }
+
+  function nextDueDate(studentId) {
+    var setting = consultationSetting(studentId);
+    var cycleDays = consultationCycleDays(setting.cycle);
+    if (!setting.enabled || !cycleDays) return '';
+    var latest = latestConsultationDate(studentId);
+    return latest ? addDays(latest, cycleDays) : todayString();
+  }
+
+  function timeToMinutes(time) {
+    var parts = String(time || '14:00').split(':');
+    return Number(parts[0] || 0) * 60 + Number(parts[1] || 0);
+  }
+
+  function minutesToTime(minutes) {
+    var hour = Math.floor(minutes / 60);
+    var minute = minutes % 60;
+    return String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0');
+  }
+
+  function consultationTeacherOptions(selectedId, student) {
+    var ids = studentTeacherIds(student);
+    var options = '<option value="">자동</option>';
+    return options + ids.map(function (teacherId) {
+      return '<option value="' + teacherId + '" ' + (selectedId === teacherId ? 'selected' : '') + '>' + escapeHtml(teacherName(teacherId)) + '</option>';
+    }).join('');
+  }
+
   function activeAssignments() {
     return state.assignments.filter(function (assignment) {
       var student = getStudent(assignment.studentId);
@@ -559,6 +691,18 @@
     return rows;
   }
 
+  function studentProgressUnitRows(studentId) {
+    return progressRows().filter(function (row) { return row.student.id === studentId; }).sort(function (a, b) {
+      return a.book.name.localeCompare(b.book.name) || a.unit - b.unit;
+    });
+  }
+
+  function renderStudentProgressUnitRows(rows, doneList) {
+    return rows.map(function (row) {
+      return '<tr><td>' + escapeHtml(row.book.name) + '</td><td class="numeric">' + row.unit + '</td><td>' + escapeHtml(row.unitName) + '</td><td>' + escapeHtml(doneList ? (row.date || '체크일 없음') : '미완료') + '</td><td>' + escapeHtml(row.memo || '') + '</td></tr>';
+    }).join('');
+  }
+
   function downloadText(filename, content, type) {
     var blob = new Blob([content], { type: type });
     var url = URL.createObjectURL(blob);
@@ -685,6 +829,139 @@
     }).sort(function (a, b) { return String(a.dueDate || '').localeCompare(String(b.dueDate || '')); });
   }
 
+  function filteredConsultationSchedule() {
+    return (state.consultationSchedule || []).filter(function (item) {
+      var student = getStudent(item.studentId);
+      if (!student) return false;
+      if (!teacherMatches(student, ui.consultTeacherId)) return false;
+      return true;
+    }).sort(function (a, b) {
+      return (String(a.date || '') + String(a.time || '')).localeCompare(String(b.date || '') + String(b.time || ''));
+    });
+  }
+
+  function updateConsultationSetting(studentId, field, value, checked) {
+    var setting = consultationSetting(studentId);
+    if (field === 'enabled') setting.enabled = checked;
+    else if (field === 'weekday') {
+      var day = Number(value);
+      var days = normalizeWeekdays(setting.weekdays);
+      if (checked && days.indexOf(day) === -1) days.push(day);
+      if (!checked) days = days.filter(function (item) { return item !== day; });
+      setting.weekdays = normalizeWeekdays(days).sort();
+    } else if (field === 'cycle') setting.cycle = value;
+    else if (field === 'teacherId') setting.teacherId = value;
+    else if (field === 'priority') setting.priority = value;
+    else setting[field] = String(value || '').trim();
+    state.consultationSettings[studentId] = setting;
+    saveState();
+    render();
+  }
+
+  function existingConsultationSlotMap() {
+    var map = {};
+    (state.consultationSchedule || []).forEach(function (item) {
+      if (item.status !== 'canceled' && item.date && item.time) map[item.date + ' ' + item.time] = true;
+    });
+    return map;
+  }
+
+  function buildConsultationDraft() {
+    var startDate = ui.consultStartDate || todayString();
+    var weeks = Math.max(1, Math.min(12, Number(ui.consultWeeks || 4)));
+    var endDate = addDays(startDate, weeks * 7 - 1);
+    var maxPerDay = Math.max(1, Math.min(20, Number(ui.consultMaxPerDay || 6)));
+    var interval = Math.max(5, Math.min(120, Number(ui.consultInterval || 20)));
+    var startMinutes = timeToMinutes(ui.consultStartTime || '14:00');
+    var slotMap = existingConsultationSlotMap();
+    var dailyCounts = {};
+    var draft = [];
+    var conflicts = [];
+    var candidates = studentsByTeacher(ui.consultTeacherId).filter(function (student) {
+      var setting = consultationSetting(student.id);
+      if (!setting.enabled || setting.cycle === 'as-needed') return false;
+      var due = nextDueDate(student.id);
+      return due && compareDates(due, endDate) <= 0;
+    }).sort(function (a, b) {
+      var sa = consultationSetting(a.id);
+      var sb = consultationSetting(b.id);
+      if (sa.priority !== sb.priority) return sa.priority === 'high' ? -1 : 1;
+      return compareDates(nextDueDate(a.id), nextDueDate(b.id)) || a.name.localeCompare(b.name);
+    });
+
+    candidates.forEach(function (student) {
+      var setting = consultationSetting(student.id);
+      var due = nextDueDate(student.id);
+      var date = compareDates(due, startDate) > 0 ? due : startDate;
+      var placed = null;
+      while (compareDates(date, endDate) <= 0 && !placed) {
+        var day = parseDateValue(date).getDay();
+        if (setting.weekdays.indexOf(day) !== -1) {
+          dailyCounts[date] = dailyCounts[date] || 0;
+          for (var slot = 0; slot < maxPerDay; slot += 1) {
+            var time = minutesToTime(startMinutes + slot * interval);
+            var key = date + ' ' + time;
+            if (!slotMap[key]) {
+              slotMap[key] = true;
+              dailyCounts[date] += 1;
+              placed = {
+                id: uid('consult-draft'),
+                studentId: student.id,
+                studentName: student.name,
+                teacherId: setting.teacherId || firstTeacherIdForStudent(student),
+                teacherName: teacherName(setting.teacherId || firstTeacherIdForStudent(student)),
+                date: date,
+                time: time,
+                duration: interval,
+                cycle: setting.cycle,
+                priority: setting.priority,
+                dueDate: due,
+                memo: setting.memo || ''
+              };
+              break;
+            }
+          }
+        }
+        date = addDays(date, 1);
+      }
+      if (placed) draft.push(placed);
+      else conflicts.push({ studentId: student.id, studentName: student.name, dueDate: due, weekdays: weekdayLabels(setting.weekdays), reason: '가능한 요일에 빈 자리가 없습니다.' });
+    });
+
+    ui.consultDraft = draft;
+    ui.consultConflicts = conflicts;
+  }
+
+  function saveConsultationDraft() {
+    if (!ui.consultDraft.length) { alert('저장할 상담 일정이 없습니다.'); return; }
+    state.consultationSchedule = state.consultationSchedule || [];
+    ui.consultDraft.forEach(function (item) {
+      state.consultationSchedule.push({
+        id: uid('consult'),
+        studentId: item.studentId,
+        teacherId: item.teacherId || '',
+        teacherIds: item.teacherId ? [item.teacherId] : [],
+        date: item.date,
+        time: item.time,
+        duration: item.duration,
+        status: 'scheduled',
+        memo: item.memo || '',
+        createdAt: new Date().toISOString()
+      });
+    });
+    ui.consultDraft = [];
+    ui.consultConflicts = [];
+    saveState();
+    render();
+  }
+
+  function deleteConsultationSchedule(scheduleId) {
+    if (!confirm('상담 일정을 삭제할까요?')) return;
+    state.consultationSchedule = (state.consultationSchedule || []).filter(function (item) { return item.id !== scheduleId; });
+    saveState();
+    render();
+  }
+
   function aiTemplateOptions(selected) {
     return ['균형 평가','칭찬 중심','보완점 중심','월말 리포트','학부모 문자','상담 기록'].map(function (template) {
       return '<option value="' + template + '" ' + (selected === template ? 'selected' : '') + '>' + template + '</option>';
@@ -719,6 +996,34 @@
     VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>숙제</h2><p>' + filteredHomework().length + '건</p></div></div><section class="panel"><div class="panel-body"><div class="filter-row"><select class="select" id="homeworkTeacherFilter">' + teacherOptions(ui.homeworkTeacherId, true, true) + '</select><button class="secondary-button" id="toggleHomeworkFilters">필터</button></div>' + advanced + '</div></section><section class="panel"><div class="panel-body"><form class="form-grid students" id="homeworkForm"><select class="select" name="studentId" required>' + studentOptions('', false, ui.homeworkTeacherId) + '</select><input class="field" name="title" placeholder="숙제 내용" required><input class="field" name="dueDate" type="date" value="' + todayString() + '"><select class="select" name="status">' + homeworkStatusOptions('todo') + '</select><input class="field" name="memo" placeholder="메모"><button class="primary-button" type="submit">추가</button></form></div><div class="table-wrap"><table><thead><tr><th>선생님</th><th>학생</th><th>숙제</th><th>기한</th><th>상태</th><th>메모</th><th class="numeric">관리</th></tr></thead><tbody>' + (rows || '<tr><td colspan="7">' + emptyState('숙제가 없습니다', '학생별 숙제를 추가하세요.') + '</td></tr>') + '</tbody></table></div></section></div>';
   }
 
+  function renderConsultSchedule() {
+    if (!ui.consultStartDate) ui.consultStartDate = todayString();
+    var visibleStudents = studentsByTeacher(ui.consultTeacherId);
+    var dueStudents = visibleStudents.filter(function (student) {
+      var due = nextDueDate(student.id);
+      return due && compareDates(due, addDays(ui.consultStartDate, Number(ui.consultWeeks || 4) * 7 - 1)) <= 0;
+    });
+    var settingRows = visibleStudents.map(function (student) {
+      var setting = consultationSetting(student.id);
+      var weekdays = CONSULT_WEEKDAYS.map(function (day) {
+        var checked = setting.weekdays.indexOf(day.value) !== -1;
+        return '<label class="weekday-check"><input type="checkbox" data-action="update-consult-setting" data-field="weekday" data-student-id="' + student.id + '" value="' + day.value + '" ' + (checked ? 'checked' : '') + '><span>' + day.label + '</span></label>';
+      }).join('');
+      return '<tr data-student-id="' + student.id + '"><td>' + escapeHtml(student.name) + '</td><td>' + escapeHtml(teacherNamesForStudent(student)) + '</td><td><label class="sync-toggle"><input type="checkbox" data-action="update-consult-setting" data-field="enabled" data-student-id="' + student.id + '" ' + (setting.enabled ? 'checked' : '') + '> 사용</label></td><td><select class="select" data-action="update-consult-setting" data-field="cycle" data-student-id="' + student.id + '">' + consultationCycleOptions(setting.cycle) + '</select></td><td><div class="weekday-check-list">' + weekdays + '</div></td><td><select class="select" data-action="update-consult-setting" data-field="teacherId" data-student-id="' + student.id + '">' + consultationTeacherOptions(setting.teacherId, student) + '</select></td><td><select class="select" data-action="update-consult-setting" data-field="priority" data-student-id="' + student.id + '"><option value="normal" ' + (setting.priority === 'normal' ? 'selected' : '') + '>보통</option><option value="high" ' + (setting.priority === 'high' ? 'selected' : '') + '>높음</option></select></td><td><input class="field" data-action="update-consult-setting" data-field="preferredTime" data-student-id="' + student.id + '" placeholder="예: 16시 이후" value="' + escapeHtml(setting.preferredTime || '') + '"></td><td><input class="field" data-action="update-consult-setting" data-field="memo" data-student-id="' + student.id + '" placeholder="메모" value="' + escapeHtml(setting.memo || '') + '"></td><td>' + escapeHtml(nextDueDate(student.id) || '-') + '</td></tr>';
+    }).join('');
+    var draftRows = ui.consultDraft.map(function (item) {
+      return '<tr><td>' + escapeHtml(item.date) + '</td><td>' + escapeHtml(item.time) + '</td><td>' + escapeHtml(item.teacherName || '') + '</td><td>' + escapeHtml(item.studentName) + '</td><td>' + escapeHtml(consultationCycleLabel(item.cycle)) + '</td><td>' + escapeHtml(consultationPriorityLabel(item.priority)) + '</td><td>' + escapeHtml(item.dueDate || '') + '</td><td>' + escapeHtml(item.memo || '') + '</td></tr>';
+    }).join('');
+    var conflictRows = ui.consultConflicts.map(function (item) {
+      return '<tr><td>' + escapeHtml(item.studentName) + '</td><td>' + escapeHtml(item.dueDate || '') + '</td><td>' + escapeHtml(item.weekdays || '') + '</td><td>' + escapeHtml(item.reason || '') + '</td></tr>';
+    }).join('');
+    var scheduleRows = filteredConsultationSchedule().map(function (item) {
+      var student = getStudent(item.studentId);
+      return '<tr data-consult-id="' + item.id + '"><td><input class="field" type="date" data-action="update-consult-schedule" data-field="date" value="' + escapeHtml(item.date || '') + '"></td><td><input class="field" type="time" data-action="update-consult-schedule" data-field="time" value="' + escapeHtml(item.time || '') + '"></td><td>' + escapeHtml(student ? teacherNamesForStudent(student) : teacherNamesForIds(item.teacherIds || item.teacherId || '')) + '</td><td>' + escapeHtml(student ? student.name : '') + '</td><td><select class="select" data-action="update-consult-schedule" data-field="status">' + consultationStatusOptions(item.status) + '</select></td><td><input class="field" data-action="update-consult-schedule" data-field="memo" value="' + escapeHtml(item.memo || '') + '"></td><td><div class="row-actions"><button class="mini-button danger" data-action="delete-consult-schedule" title="삭제" aria-label="삭제">×</button></div></td></tr>';
+    }).join('');
+    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>상담 일정</h2><p>예정 필요 학생 ' + dueStudents.length + '명 · 확정 일정 ' + (state.consultationSchedule || []).length + '건</p></div><div class="toolbar"><select class="select" id="consultTeacherFilter">' + teacherOptions(ui.consultTeacherId, true, true) + '</select></div></div><section class="panel"><div class="panel-head"><h3>자동 상담표 만들기</h3></div><div class="panel-body consult-generator"><label class="stacked-field"><span>시작일</span><input class="field" type="date" id="consultStartDate" value="' + escapeHtml(ui.consultStartDate) + '"></label><label class="stacked-field"><span>기간</span><select class="select" id="consultWeeks"><option value="2" ' + (Number(ui.consultWeeks) === 2 ? 'selected' : '') + '>2주</option><option value="4" ' + (Number(ui.consultWeeks) === 4 ? 'selected' : '') + '>4주</option><option value="8" ' + (Number(ui.consultWeeks) === 8 ? 'selected' : '') + '>8주</option></select></label><label class="stacked-field"><span>첫 시간</span><input class="field" type="time" id="consultStartTime" value="' + escapeHtml(ui.consultStartTime) + '"></label><label class="stacked-field"><span>간격</span><input class="field" type="number" min="5" max="120" step="5" id="consultInterval" value="' + escapeHtml(ui.consultInterval) + '"></label><label class="stacked-field"><span>하루 최대</span><input class="field" type="number" min="1" max="20" id="consultMaxPerDay" value="' + escapeHtml(ui.consultMaxPerDay) + '"></label><div class="data-actions"><button class="primary-button" id="buildConsultSchedule">자동 생성</button><button class="secondary-button" id="saveConsultDraft">일정 저장</button><button class="secondary-button" id="clearConsultDraft">미리보기 비우기</button></div></div></section><section class="panel"><div class="panel-head"><h3>생성 결과 미리보기</h3></div><div class="table-wrap"><table><thead><tr><th>날짜</th><th>시간</th><th>선생님</th><th>학생</th><th>주기</th><th>우선순위</th><th>기준일</th><th>메모</th></tr></thead><tbody>' + (draftRows || '<tr><td colspan="8">' + emptyState('아직 생성된 상담표가 없습니다', '자동 생성을 누르면 저장 전 미리보기가 표시됩니다.') + '</td></tr>') + '</tbody></table></div></section>' + (conflictRows ? '<section class="panel"><div class="panel-head"><h3>배정 실패</h3></div><div class="table-wrap"><table><thead><tr><th>학생</th><th>상담 기준일</th><th>가능 요일</th><th>이유</th></tr></thead><tbody>' + conflictRows + '</tbody></table></div></section>' : '') + '<section class="panel"><div class="panel-head"><h3>확정된 상담 일정</h3></div><div class="table-wrap"><table><thead><tr><th>날짜</th><th>시간</th><th>선생님</th><th>학생</th><th>상태</th><th>메모</th><th class="numeric">관리</th></tr></thead><tbody>' + (scheduleRows || '<tr><td colspan="7">' + emptyState('확정된 상담 일정이 없습니다', '상담표를 자동 생성한 뒤 일정 저장을 누르세요.') + '</td></tr>') + '</tbody></table></div></section><section class="panel"><div class="panel-head"><h3>학생별 상담 설정</h3></div><div class="table-wrap"><table class="consult-settings-table"><thead><tr><th>학생</th><th>담당</th><th>사용</th><th>주기</th><th>가능 요일</th><th>상담 선생님</th><th>우선순위</th><th>가능 시간</th><th>메모</th><th>다음 기준일</th></tr></thead><tbody>' + (settingRows || '<tr><td colspan="10">' + emptyState('학생이 없습니다', '학생을 먼저 추가하세요.') + '</td></tr>') + '</tbody></table></div></section></div>';
+  }
+
   function renderStudentDetail() {
     ensureDetailStudentId();
     var student = getStudent(ui.detailStudentId);
@@ -728,6 +1033,12 @@
       var book = getBook(assignment.bookId); var totals = assignmentTotals(assignment);
       return '<tr><td>' + escapeHtml(book ? book.name : '') + '</td><td class="numeric">' + totals.done + '/' + totals.total + '</td><td>' + renderProgressBar(totals.rate) + '</td><td class="numeric">' + totals.rate + '%</td></tr>';
     }).join('') : '';
+    var unitRows = student ? studentProgressUnitRows(student.id) : [];
+    var doneUnitRows = unitRows.filter(function (row) { return row.done; });
+    var todoUnitRows = unitRows.filter(function (row) { return !row.done; });
+    var doneUnitTableRows = renderStudentProgressUnitRows(doneUnitRows, true);
+    var todoUnitTableRows = renderStudentProgressUnitRows(todoUnitRows, false);
+    var progressUnitPanels = student ? '<div class="two-column progress-list-grid"><section class="panel"><div class="panel-head"><h3>완료 단원</h3><span class="muted">' + doneUnitRows.length + '개</span></div><div class="table-wrap"><table class="progress-unit-table"><thead><tr><th>책</th><th class="numeric">단원</th><th>단원명</th><th>체크일</th><th>메모</th></tr></thead><tbody>' + (doneUnitTableRows || '<tr><td colspan="5">' + emptyState('완료한 단원이 없습니다', '진도 체크에서 완료한 단원이 여기에 표시됩니다.') + '</td></tr>') + '</tbody></table></div></section><section class="panel"><div class="panel-head"><h3>비완료 단원</h3><span class="muted">' + todoUnitRows.length + '개</span></div><div class="table-wrap"><table class="progress-unit-table"><thead><tr><th>책</th><th class="numeric">단원</th><th>단원명</th><th>상태</th><th>메모</th></tr></thead><tbody>' + (todoUnitTableRows || '<tr><td colspan="5">' + emptyState('남은 단원이 없습니다', '배정된 책의 단원을 모두 완료했습니다.') + '</td></tr>') + '</tbody></table></div></section></div>' : '';
     var homeworkRows = student ? homeworkForStudent(student.id).slice().sort(function (a, b) { return String(a.dueDate || '').localeCompare(String(b.dueDate || '')); }).map(function (item) {
       return '<tr><td>' + escapeHtml(item.title || '') + '</td><td>' + escapeHtml(item.dueDate || '') + '</td><td><span class="status-dot ' + homeworkStatusClass(item.status) + '">' + homeworkStatusLabel(item.status) + '</span></td><td>' + escapeHtml(item.memo || '') + '</td></tr>';
     }).join('') : '';
@@ -741,7 +1052,7 @@
       var deleteButton = item.kind === 'consultation' ? '<button class="mini-button danger" data-action="delete-consultation" data-consultation-id="' + item.id + '" title="삭제" aria-label="삭제">×</button>' : '';
       return '<article class="timeline-item"><div class="evaluation-meta">' + escapeHtml(item.date || '') + ' · ' + escapeHtml(item.label) + '</div><p class="evaluation-content">' + escapeHtml(item.body).replaceAll('\n', '<br>') + '</p><div class="row-actions">' + deleteButton + '</div></article>';
     }).join('');
-    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>학생 상세</h2><p>' + (student ? escapeHtml(student.name) : '학생 없음') + '</p></div><div class="toolbar"><select class="select" id="detailTeacherFilter">' + teacherOptions(ui.detailTeacherId, true, true) + '</select><select class="select" id="detailStudentSelect">' + studentOptions(ui.detailStudentId, false, ui.detailTeacherId) + '</select></div></div>' + (student ? '<div class="detail-grid"><section class="panel"><div class="panel-head"><h3>기본 정보</h3></div><div class="table-wrap"><table><tbody><tr><th>학생</th><td>' + escapeHtml(student.name) + '</td></tr><tr><th>선생님</th><td>' + escapeHtml(teacherNamesForStudent(student)) + '</td></tr><tr><th>상태</th><td>' + escapeHtml(student.status || '') + '</td></tr><tr><th>메모</th><td>' + escapeHtml(student.memo || '') + '</td></tr><tr><th>진도</th><td>' + summary.done + '/' + summary.total + ' · ' + rate + '%</td></tr></tbody></table></div></section><section class="panel"><div class="panel-head"><h3>책별 진도</h3></div><div class="table-wrap"><table><thead><tr><th>책</th><th class="numeric">완료/전체</th><th>진도</th><th class="numeric">%</th></tr></thead><tbody>' + (bookRows || '<tr><td colspan="4">' + emptyState('배정된 책이 없습니다', '책 배정 화면에서 사용하는 책을 체크하세요.') + '</td></tr>') + '</tbody></table></div></section></div><section class="panel"><div class="panel-head"><h3>숙제</h3></div><div class="table-wrap"><table><thead><tr><th>숙제</th><th>기한</th><th>상태</th><th>메모</th></tr></thead><tbody>' + (homeworkRows || '<tr><td colspan="4">' + emptyState('숙제가 없습니다', '숙제 탭에서 추가하세요.') + '</td></tr>') + '</tbody></table></div></section><section class="panel"><div class="panel-head"><h3>상담/평가 이력</h3></div><div class="panel-body"><form class="form-grid students" id="consultationForm"><input type="hidden" name="studentId" value="' + student.id + '"><input class="field" type="date" name="date" value="' + todayString() + '"><select class="select" name="type"><option>상담 메모</option><option>학부모 연락</option><option>학습 관찰</option><option>수업 특이사항</option></select><input class="field" name="content" placeholder="상담 또는 관찰 내용을 입력" required><button class="primary-button" type="submit">추가</button></form></div><div class="panel-body timeline-list">' + (historyRows || emptyState('이력이 없습니다', '상담 메모를 추가하거나 AI 평가를 저장하세요.')) + '</div></section>' : emptyState('학생이 없습니다', '학생을 먼저 추가하세요.')) + '</div>';
+    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>학생 상세</h2><p>' + (student ? escapeHtml(student.name) : '학생 없음') + '</p></div><div class="toolbar"><select class="select" id="detailTeacherFilter">' + teacherOptions(ui.detailTeacherId, true, true) + '</select><select class="select" id="detailStudentSelect">' + studentOptions(ui.detailStudentId, false, ui.detailTeacherId) + '</select></div></div>' + (student ? '<div class="detail-grid"><section class="panel"><div class="panel-head"><h3>기본 정보</h3></div><div class="table-wrap"><table><tbody><tr><th>학생</th><td>' + escapeHtml(student.name) + '</td></tr><tr><th>선생님</th><td>' + escapeHtml(teacherNamesForStudent(student)) + '</td></tr><tr><th>상태</th><td>' + escapeHtml(student.status || '') + '</td></tr><tr><th>메모</th><td>' + escapeHtml(student.memo || '') + '</td></tr><tr><th>진도</th><td>' + summary.done + '/' + summary.total + ' · ' + rate + '%</td></tr></tbody></table></div></section><section class="panel"><div class="panel-head"><h3>책별 진도</h3></div><div class="table-wrap"><table><thead><tr><th>책</th><th class="numeric">완료/전체</th><th>진도</th><th class="numeric">%</th></tr></thead><tbody>' + (bookRows || '<tr><td colspan="4">' + emptyState('배정된 책이 없습니다', '책 배정 화면에서 사용하는 책을 체크하세요.') + '</td></tr>') + '</tbody></table></div></section></div>' + progressUnitPanels + '<section class="panel"><div class="panel-head"><h3>숙제</h3></div><div class="table-wrap"><table><thead><tr><th>숙제</th><th>기한</th><th>상태</th><th>메모</th></tr></thead><tbody>' + (homeworkRows || '<tr><td colspan="4">' + emptyState('숙제가 없습니다', '숙제 탭에서 추가하세요.') + '</td></tr>') + '</tbody></table></div></section><section class="panel"><div class="panel-head"><h3>상담/평가 이력</h3></div><div class="panel-body"><form class="form-grid students" id="consultationForm"><input type="hidden" name="studentId" value="' + student.id + '"><input class="field" type="date" name="date" value="' + todayString() + '"><select class="select" name="type"><option>상담 메모</option><option>학부모 연락</option><option>학습 관찰</option><option>수업 특이사항</option></select><input class="field" name="content" placeholder="상담 또는 관찰 내용을 입력" required><button class="primary-button" type="submit">추가</button></form></div><div class="panel-body timeline-list">' + (historyRows || emptyState('이력이 없습니다', '상담 메모를 추가하거나 AI 평가를 저장하세요.')) + '</div></section>' : emptyState('학생이 없습니다', '학생을 먼저 추가하세요.')) + '</div>';
   }
 
   function renderDashboard() {
@@ -905,7 +1216,7 @@
 
   function render() {
     tabs.forEach(function (tab) { tab.classList.toggle('active', tab.dataset.tab === ui.activeTab); });
-    ({ dashboard: renderDashboard, alerts: renderAlerts, students: renderStudents, detail: renderStudentDetail, teachers: renderTeachers, books: renderBooks, assignments: renderAssignments, progress: renderProgress, homework: renderHomework, quick: renderQuick, ai: renderAiEvaluation, data: renderData })[ui.activeTab]();
+    ({ dashboard: renderDashboard, alerts: renderAlerts, students: renderStudents, detail: renderStudentDetail, consultSchedule: renderConsultSchedule, teachers: renderTeachers, books: renderBooks, assignments: renderAssignments, progress: renderProgress, homework: renderHomework, quick: renderQuick, ai: renderAiEvaluation, data: renderData })[ui.activeTab]();
   }
 
   function addStudent(form) { var data = new FormData(form); var name = String(data.get('name') || '').trim(); if (!name) return; var teacherIds = normalizeTeacherIdList(String(data.get('teacherId') || '').trim()); state.students.push({ id: uid('stu'), name: name, status: String(data.get('status') || '재원'), teacherIds: teacherIds, teacherId: teacherIds[0] || '', memo: String(data.get('memo') || '').trim() }); saveState(); render(); }
@@ -922,6 +1233,8 @@
     state.evaluations = (state.evaluations || []).filter(function (item) { return item.studentId !== studentId; });
     state.homework = (state.homework || []).filter(function (item) { return item.studentId !== studentId; });
     state.consultations = (state.consultations || []).filter(function (item) { return item.studentId !== studentId; });
+    state.consultationSchedule = (state.consultationSchedule || []).filter(function (item) { return item.studentId !== studentId; });
+    if (state.consultationSettings) delete state.consultationSettings[studentId];
     Object.keys(state.progress).forEach(function (key) { if (assignmentIds.some(function (id) { return key.indexOf(id + ':') === 0; })) delete state.progress[key]; });
     if (ui.selectedStudentId === studentId) ui.selectedStudentId = state.students[0] ? state.students[0].id : null;
     if (ui.aiStudentId === studentId) ui.aiStudentId = state.students[0] ? state.students[0].id : null;
@@ -937,7 +1250,7 @@
     state.students.forEach(function (student) {
       setStudentTeacherIds(student, studentTeacherIds(student).filter(function (id) { return id !== teacherId; }));
     });
-    ['dashboardTeacherId','studentTeacherId','assignmentTeacherId','progressTeacherId','quickTeacherId','aiTeacherId','alertsTeacherId','detailTeacherId','homeworkTeacherId'].forEach(function (key) { if (ui[key] === teacherId) ui[key] = 'all'; });
+    ['dashboardTeacherId','studentTeacherId','assignmentTeacherId','progressTeacherId','quickTeacherId','aiTeacherId','alertsTeacherId','detailTeacherId','homeworkTeacherId','consultTeacherId'].forEach(function (key) { if (ui[key] === teacherId) ui[key] = 'all'; });
     saveState(); render();
   }
 
@@ -976,11 +1289,13 @@
   });
 
   document.addEventListener('change', function (event) {
-    var target = event.target; var action = target.dataset.action; var studentRow = target.closest('[data-student-id]'); var teacherRow = target.closest('[data-teacher-id]'); var homeworkRow = target.closest('[data-homework-id]'); var bookRow = target.closest('[data-book-id]'); var progressRow = target.closest('[data-assignment-id][data-unit]');
+    var target = event.target; var action = target.dataset.action; var studentRow = target.closest('[data-student-id]'); var teacherRow = target.closest('[data-teacher-id]'); var homeworkRow = target.closest('[data-homework-id]'); var consultRow = target.closest('[data-consult-id]'); var bookRow = target.closest('[data-book-id]'); var progressRow = target.closest('[data-assignment-id][data-unit]');
     if (action === 'update-student' && studentRow) { var student = getStudent(studentRow.dataset.studentId); if (!student) return; if (target.dataset.field === 'teacherId') setStudentTeacherIds(student, target.value ? [target.value.trim()] : []); else student[target.dataset.field] = target.value.trim(); saveState(); render(); }
     if (action === 'toggle-student-teacher' && studentRow) { var assignedStudent = getStudent(studentRow.dataset.studentId); if (!assignedStudent) return; var assignedTeacherIds = studentTeacherIds(assignedStudent); if (target.checked && assignedTeacherIds.indexOf(target.dataset.teacherId) === -1) assignedTeacherIds.push(target.dataset.teacherId); if (!target.checked) assignedTeacherIds = assignedTeacherIds.filter(function (id) { return id !== target.dataset.teacherId; }); setStudentTeacherIds(assignedStudent, assignedTeacherIds); saveState(); render(); }
     if (action === 'update-teacher' && teacherRow) { var teacher = getTeacher(teacherRow.dataset.teacherId); if (!teacher) return; teacher[target.dataset.field] = target.value.trim(); saveState(); render(); }
     if (action === 'update-homework' && homeworkRow) { var homework = state.homework.find(function (item) { return item.id === homeworkRow.dataset.homeworkId; }); if (!homework) return; homework[target.dataset.field] = target.value.trim(); saveState(); render(); }
+    if (action === 'update-consult-setting') updateConsultationSetting(target.dataset.studentId, target.dataset.field, target.value, target.checked);
+    if (action === 'update-consult-schedule' && consultRow) { var consult = (state.consultationSchedule || []).find(function (item) { return item.id === consultRow.dataset.consultId; }); if (!consult) return; consult[target.dataset.field] = target.value.trim(); saveState(); render(); }
     if (action === 'update-book' && bookRow) { var book = getBook(bookRow.dataset.bookId); if (!book) return; if (target.dataset.field === 'unitCount') book.unitCount = clampUnitCount(target.value); else book[target.dataset.field] = target.value.trim(); saveState(); render(); }
     if (action === 'toggle-assignment') toggleAssignment(target.dataset.studentId, target.dataset.bookId, target.checked);
     if (action === 'toggle-progress' && progressRow) { var old = getRecord(progressRow.dataset.assignmentId, Number(progressRow.dataset.unit)); setRecord(progressRow.dataset.assignmentId, Number(progressRow.dataset.unit), { done: target.checked, date: target.checked ? old.date || new Date().toISOString().slice(0, 10) : old.date }); render(); }
@@ -996,6 +1311,8 @@
     if (target.id === 'homeworkTeacherFilter') { ui.homeworkTeacherId = target.value; ui.homeworkStudentId = 'all'; render(); }
     if (target.id === 'homeworkStudentFilter') { ui.homeworkStudentId = target.value; render(); }
     if (target.id === 'homeworkStatusFilter') { ui.homeworkStatus = target.value; render(); }
+    if (target.id === 'consultTeacherFilter') { ui.consultTeacherId = target.value; ui.consultDraft = []; ui.consultConflicts = []; render(); }
+    if (target.id === 'consultWeeks') { ui.consultWeeks = Number(target.value || 4); render(); }
     if (target.id === 'progressTeacherFilter') { ui.progressTeacherId = target.value; ui.progressStudentId = 'all'; render(); }
     if (target.id === 'progressStudentFilter') { ui.progressStudentId = target.value; render(); }
     if (target.id === 'progressBookFilter') { ui.progressBookId = target.value; render(); }
@@ -1025,10 +1342,14 @@
     if (target.id === 'generateEvaluationBtn') generateEvaluation();
     if (target.id === 'saveEvaluationBtn') saveEvaluationDraft();
     if (target.id === 'copyEvaluationBtn') copyEvaluationDraft();
+    if (target.id === 'buildConsultSchedule') { buildConsultationDraft(); renderConsultSchedule(); }
+    if (target.id === 'saveConsultDraft') saveConsultationDraft();
+    if (target.id === 'clearConsultDraft') { ui.consultDraft = []; ui.consultConflicts = []; renderConsultSchedule(); }
     if (target.id === 'toggleProgressFilters') { ui.showProgressFilters = !ui.showProgressFilters; render(); }
     if (target.id === 'toggleQuickFilters') { ui.showQuickFilters = !ui.showQuickFilters; render(); }
     if (target.id === 'toggleHomeworkFilters') { ui.showHomeworkFilters = !ui.showHomeworkFilters; render(); }
     if (action === 'delete-homework') deleteHomework(target.closest('[data-homework-id]').dataset.homeworkId);
+    if (action === 'delete-consult-schedule') deleteConsultationSchedule(target.closest('[data-consult-id]').dataset.consultId);
     if (action === 'delete-consultation') deleteConsultation(target.dataset.consultationId);
     if (action === 'add-ai-keyword') addAiKeyword(target.dataset.keyword);
     if (target.id === 'clearAiKeywords') clearAiKeywords();
@@ -1040,6 +1361,10 @@
     if (event.target.id === 'progressQuery') { ui.progressQuery = event.target.value; renderProgress(); }
     if (event.target.id === 'aiKeywordsInput') ui.aiKeywords = event.target.value;
     if (event.target.id === 'aiDraftOutput') ui.aiDraft = event.target.value;
+    if (event.target.id === 'consultStartDate') ui.consultStartDate = event.target.value || todayString();
+    if (event.target.id === 'consultStartTime') ui.consultStartTime = event.target.value || '14:00';
+    if (event.target.id === 'consultInterval') ui.consultInterval = Number(event.target.value || 20);
+    if (event.target.id === 'consultMaxPerDay') ui.consultMaxPerDay = Number(event.target.value || 6);
     if (event.target.id === 'syncUrlInput') { syncConfig.url = normalizeSyncUrl(event.target.value); saveSyncConfig(); setSyncStatus('연동 URL 저장됨'); }
     if (event.target.id === 'syncTokenInput') { syncConfig.token = event.target.value.trim(); saveSyncConfig(); setSyncStatus('연동 PIN 저장됨'); }
   });

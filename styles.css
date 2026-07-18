@@ -75,6 +75,12 @@ h3 { margin: 0; font-size: 15px; }
 .teacher-check { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 12px; font-weight: 800; }
 .teacher-check:has(input:checked) { border-color: var(--blue); background: var(--blue-soft); color: var(--blue-strong); }
 .teacher-check input { width: 16px; height: 16px; }
+.consult-generator { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)) auto; gap: 10px; align-items: end; }
+.weekday-check-list { display: flex; flex-wrap: wrap; gap: 5px; min-width: 220px; }
+.weekday-check { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 12px; font-weight: 800; }
+.weekday-check:has(input:checked) { border-color: var(--teal); background: var(--green-soft); color: #166534; }
+.weekday-check input { width: 15px; height: 15px; }
+.consult-settings-table { min-width: 1280px; }
 .field, .select, .textarea { width: 100%; min-height: 38px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); padding: 8px 10px; }
 .field:focus, .select:focus, .textarea:focus { outline: 2px solid rgba(37, 99, 235, 0.18); border-color: var(--blue); }
 .primary-button, .secondary-button, .danger-button { min-height: 38px; border-radius: 8px; border: 1px solid transparent; padding: 8px 12px; font-weight: 800; }
@@ -108,6 +114,7 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
 .quick-table { min-width: 980px; }
 .quick-table th, .quick-table td { text-align: center; padding: 7px; }
 .quick-table th:first-child, .quick-table td:first-child, .quick-table th:nth-child(2), .quick-table td:nth-child(2) { text-align: left; }
+.progress-unit-table { min-width: 620px; }
 .empty-state { display: grid; gap: 4px; padding: 28px; border: 1px dashed var(--line); border-radius: 8px; background: #fbfcfe; color: var(--muted); text-align: center; }
 .empty-state strong { color: var(--text); }
 .data-actions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -130,7 +137,7 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
 .evaluation-content { margin: 0; line-height: 1.55; white-space: normal; }
 .stacked-field { display: grid; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 700; }
 @media (max-width: 1000px) {
-  .summary-grid, .two-column, .assignment-layout, .filters, .ai-layout, .detail-grid, .filter-row { grid-template-columns: 1fr; }
+  .summary-grid, .two-column, .assignment-layout, .filters, .ai-layout, .detail-grid, .filter-row, .consult-generator { grid-template-columns: 1fr; }
   .form-grid, .form-grid.students, .form-grid.teachers, .form-grid.books { grid-template-columns: 1fr; }
   .view { padding: 18px 16px 28px; }
   .topbar, .tabs { padding-left: 16px; padding-right: 16px; }

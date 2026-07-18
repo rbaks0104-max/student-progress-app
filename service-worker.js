@@ -1,4 +1,4 @@
-const CACHE_NAME = 'student-progress-mobile-v1';
+const CACHE_NAME = 'student-progress-mobile-v3';
 const APP_FILES = [
   './',
   './index.html',
