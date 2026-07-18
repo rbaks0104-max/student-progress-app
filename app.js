@@ -177,6 +177,33 @@
     });
   }
 
+  function assertSyncPayload(payload) {
+    if (payload && payload.ok === false) throw new Error(payload.error || '구글 시트 요청이 실패했습니다.');
+    return payload;
+  }
+
+  function extractStateFromSyncPayload(payload) {
+    assertSyncPayload(payload);
+    var nextState = payload && (payload.state || (payload.data && payload.data.state));
+    if (!nextState || !nextState.students || !nextState.books || !nextState.assignments || !nextState.progress) {
+      throw new Error('시트에 저장된 앱 데이터가 없습니다.');
+    }
+    return nextState;
+  }
+
+  function fetchSheetStatePayload() {
+    return requestJson(syncEndpointUrl('load'), { method: 'GET' }).catch(loadViaJsonp);
+  }
+
+  function verifySheetSave() {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, 900);
+    }).then(fetchSheetStatePayload).then(function (payload) {
+      extractStateFromSyncPayload(payload);
+      return true;
+    });
+  }
+
   function evaluateViaJsonp(input) {
     return new Promise(function (resolve, reject) {
       var callbackName = '__studentEvaluationAi_' + Date.now().toString(36);
@@ -248,6 +275,9 @@
       body: JSON.stringify(payload)
     }).catch(function () {
       return postViaHiddenForm(payload);
+    }).then(function (payload) {
+      assertSyncPayload(payload);
+      return verifySheetSave();
     }).then(function () {
       syncConfig.lastSync = new Date().toISOString();
       saveSyncConfig();
@@ -265,11 +295,8 @@
       return Promise.resolve(false);
     }
     setSyncStatus('구글 시트에서 불러오는 중...');
-    return requestJson(syncEndpointUrl('load'), { method: 'GET' }).catch(loadViaJsonp).then(function (payload) {
-      var nextState = payload && (payload.state || (payload.data && payload.data.state));
-      if (!nextState || !nextState.students || !nextState.books || !nextState.assignments || !nextState.progress) {
-        throw new Error('시트에 저장된 앱 데이터가 없습니다.');
-      }
+    return fetchSheetStatePayload().then(function (payload) {
+      var nextState = extractStateFromSyncPayload(payload);
       state = normalizeState(nextState);
       saveState({ skipSync: true });
       syncConfig.lastSync = new Date().toISOString();
