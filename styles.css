@@ -69,6 +69,7 @@ h3 { margin: 0; font-size: 15px; }
 .template-hint { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .form-grid { display: grid; grid-template-columns: minmax(140px, 1.2fr) minmax(90px, 0.7fr) minmax(180px, 2fr) auto; gap: 8px; align-items: center; }
 .form-grid.students { grid-template-columns: minmax(140px, 1.1fr) 110px minmax(150px, 1fr) minmax(180px, 1.5fr) auto; }
+.form-grid.student-form { grid-template-columns: minmax(140px, 1.1fr) minmax(150px, 1fr) minmax(180px, 1.5fr) auto; }
 .form-grid.teachers { grid-template-columns: minmax(180px, 1.2fr) minmax(220px, 2fr) auto; }
 .form-grid.books { grid-template-columns: minmax(180px, 1.4fr) 110px minmax(180px, 2fr) auto; }
 .teacher-check-list { display: flex; flex-wrap: wrap; gap: 6px; min-width: 220px; }
@@ -138,7 +139,7 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
 .stacked-field { display: grid; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 700; }
 @media (max-width: 1000px) {
   .summary-grid, .two-column, .assignment-layout, .filters, .ai-layout, .detail-grid, .filter-row, .consult-generator { grid-template-columns: 1fr; }
-  .form-grid, .form-grid.students, .form-grid.teachers, .form-grid.books { grid-template-columns: 1fr; }
+  .form-grid, .form-grid.students, .form-grid.student-form, .form-grid.teachers, .form-grid.books { grid-template-columns: 1fr; }
   .view { padding: 18px 16px 28px; }
   .topbar, .tabs { padding-left: 16px; padding-right: 16px; }
 }
