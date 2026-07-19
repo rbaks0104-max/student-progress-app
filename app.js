@@ -43,7 +43,8 @@
     aiKeywords: '',
     aiDraft: '',
     aiStatus: '',
-    aiBusy: false
+    aiBusy: false,
+    editingBookId: null
   };
   var state = loadState();
   var syncConfig = loadSyncConfig();
@@ -54,13 +55,13 @@
     var students = [];
     for (var i = 1; i <= 35; i += 1) students.push({ id: 'stu-' + i, name: '학생 ' + String(i).padStart(2, '0'), teacherId: '', teacherIds: [], memo: '' });
     var counts = [12, 10, 8, 15, 6];
-    var books = counts.map(function (unitCount, index) { return { id: 'book-' + (index + 1), name: '책 ' + String(index + 1).padStart(2, '0'), unitCount: unitCount, memo: '책 이름과 단원 수를 실제 값으로 바꾸세요' }; });
-    return { version: 6, teachers: [], students: students, books: books, assignments: [], progress: {}, homework: [], consultations: [], consultationSettings: {}, consultationSchedule: [], evaluations: [] };
+    var books = counts.map(function (unitCount, index) { return { id: 'book-' + (index + 1), name: '책 ' + String(index + 1).padStart(2, '0'), unitCount: unitCount, unitNames: Array(unitCount).fill(''), memo: '책 이름과 단원 수를 실제 값으로 바꾸세요' }; });
+    return { version: 7, teachers: [], students: students, books: books, assignments: [], progress: {}, homework: [], consultations: [], consultationSettings: {}, consultationSchedule: [], evaluations: [] };
   }
 
   function normalizeState(data) {
     if (!data || !data.students || !data.books || !data.assignments || !data.progress) return seedState();
-    data.version = Math.max(Number(data.version || 1), 6);
+    data.version = Math.max(Number(data.version || 1), 7);
     data.teachers = Array.isArray(data.teachers) ? data.teachers : [];
     data.homework = Array.isArray(data.homework) ? data.homework : [];
     data.consultations = Array.isArray(data.consultations) ? data.consultations : [];
@@ -68,6 +69,7 @@
     data.consultationSchedule = Array.isArray(data.consultationSchedule) ? data.consultationSchedule : [];
     data.evaluations = Array.isArray(data.evaluations) ? data.evaluations : [];
     data.students.forEach(function (student) { normalizeStudentTeachers(student); delete student.status; });
+    data.books.forEach(function (book) { normalizeBookUnits(book); });
     data.students.forEach(function (student) { data.consultationSettings[student.id] = normalizeConsultationSetting(data.consultationSettings[student.id], student); });
     data.teachers.forEach(function (teacher) { if (teacher.memo == null) teacher.memo = ''; });
     data.homework.forEach(function (item) { var ids = normalizeTeacherIdList(item.teacherIds); if (!ids.length && item.teacherId) ids = normalizeTeacherIdList(item.teacherId); if (item.status == null) item.status = 'todo'; if (item.memo == null) item.memo = ''; if (item.createdAt == null) item.createdAt = new Date().toISOString(); item.teacherIds = ids; item.teacherId = ids[0] || ''; });
@@ -314,6 +316,16 @@
   function uid(prefix) { return prefix + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8); }
   function escapeHtml(value) { return String(value == null ? '' : value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;'); }
   function clampUnitCount(value) { var parsed = parseInt(value, 10); if (Number.isNaN(parsed)) return 0; return Math.max(0, Math.min(80, parsed)); }
+  function normalizeBookUnits(book) {
+    book.unitCount = clampUnitCount(book.unitCount);
+    var savedNames = Array.isArray(book.unitNames) ? book.unitNames : [];
+    book.unitNames = Array.from({ length: book.unitCount }, function (_, index) { return String(savedNames[index] || '').trim(); });
+    return book;
+  }
+  function bookUnitName(book, unitNumber) {
+    var customName = book && Array.isArray(book.unitNames) ? String(book.unitNames[unitNumber - 1] || '').trim() : '';
+    return customName || unitNumber + '단원';
+  }
   function percent(done, total) { return total ? Math.round((done / total) * 100) : 0; }
   function getStudent(id) { return state.students.find(function (student) { return student.id === id; }); }
   function getBook(id) { return state.books.find(function (book) { return book.id === id; }); }
@@ -712,7 +724,7 @@
       if (!student || !book) return;
       for (var unit = 1; unit <= book.unitCount; unit += 1) {
         var record = getRecord(assignment.id, unit);
-        rows.push(Object.assign({ assignment: assignment, student: student, book: book, unit: unit, unitName: unit + '단원' }, record));
+        rows.push(Object.assign({ assignment: assignment, student: student, book: book, unit: unit, unitName: bookUnitName(book, unit) }, record));
       }
     });
     return rows;
@@ -1124,10 +1136,21 @@
   }
 
   function renderBooks() {
+    if (ui.editingBookId && !getBook(ui.editingBookId)) ui.editingBookId = null;
     var rows = state.books.map(function (book) {
-      return '<tr data-book-id="' + book.id + '"><td><input class="field" data-action="update-book" data-field="name" value="' + escapeHtml(book.name) + '"></td><td><input class="field" type="number" min="0" max="80" data-action="update-book" data-field="unitCount" value="' + book.unitCount + '"></td><td><input class="field" data-action="update-book" data-field="memo" value="' + escapeHtml(book.memo) + '"></td><td><div class="row-actions"><button class="mini-button danger" data-action="delete-book" title="삭제" aria-label="삭제">×</button></div></td></tr>';
+      normalizeBookUnits(book);
+      var namedCount = book.unitNames.filter(function (name) { return Boolean(name); }).length;
+      return '<tr data-book-id="' + book.id + '"><td><input class="field" data-action="update-book" data-field="name" value="' + escapeHtml(book.name) + '"></td><td><input class="field" type="number" min="0" max="80" data-action="update-book" data-field="unitCount" value="' + book.unitCount + '"></td><td><span class="unit-name-count">' + namedCount + '/' + book.unitCount + '</span></td><td><input class="field" data-action="update-book" data-field="memo" value="' + escapeHtml(book.memo) + '"></td><td><div class="row-actions"><button class="secondary-button compact-button" data-action="edit-book-units">단원명</button><button class="mini-button danger" data-action="delete-book" title="삭제" aria-label="삭제">×</button></div></td></tr>';
     }).join('');
-    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>책</h2><p>' + state.books.length + '권</p></div></div><section class="panel"><div class="panel-body"><form class="form-grid books" id="bookForm"><input class="field" name="name" placeholder="책 이름" required><input class="field" name="unitCount" type="number" min="1" max="80" value="10" required><input class="field" name="memo" placeholder="메모"><button class="primary-button" type="submit">추가</button></form></div><div class="table-wrap"><table><thead><tr><th>책 이름</th><th class="numeric">단원 수</th><th>메모</th><th class="numeric">관리</th></tr></thead><tbody>' + rows + '</tbody></table></div></section></div>';
+    var editingBook = getBook(ui.editingBookId);
+    var editor = '';
+    if (editingBook) {
+      var unitFields = editingBook.unitNames.map(function (unitName, index) {
+        return '<label class="unit-name-field"><span>' + (index + 1) + '단원</span><input class="field" data-action="update-unit-name" data-book-id="' + editingBook.id + '" data-unit-index="' + index + '" value="' + escapeHtml(unitName) + '" placeholder="단원 이름"></label>';
+      }).join('');
+      editor = '<section class="panel" data-book-id="' + editingBook.id + '"><div class="panel-head"><div><h3>' + escapeHtml(editingBook.name) + ' 단원명</h3><span class="muted">' + editingBook.unitCount + '개 단원</span></div><button class="secondary-button compact-button" data-action="close-book-units">닫기</button></div><div class="panel-body"><div class="unit-name-grid">' + (unitFields || emptyState('단원이 없습니다', '단원 수를 먼저 입력하세요.')) + '</div></div></section>';
+    }
+    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>책</h2><p>' + state.books.length + '권</p></div></div><section class="panel"><div class="panel-body"><form class="form-grid books" id="bookForm"><input class="field" name="name" placeholder="책 이름" required><input class="field" name="unitCount" type="number" min="1" max="80" value="10" required><input class="field" name="memo" placeholder="메모"><button class="primary-button" type="submit">추가</button></form></div><div class="table-wrap"><table><thead><tr><th>책 이름</th><th class="numeric">단원 수</th><th class="numeric">입력된 단원명</th><th>메모</th><th class="numeric">관리</th></tr></thead><tbody>' + (rows || '<tr><td colspan="5">' + emptyState('책이 없습니다', '책을 추가하세요.') + '</td></tr>') + '</tbody></table></div></section>' + editor + '</div>';
   }
 
   function renderAssignments() {
@@ -1182,7 +1205,10 @@
       var student = getStudent(assignment.studentId); var book = getBook(assignment.bookId); var totals = assignmentTotals(assignment); var cells = [];
       for (var unit = 1; unit <= cappedUnits; unit += 1) {
         if (unit > book.unitCount) cells.push('<td></td>');
-        else cells.push('<td><input type="checkbox" data-action="quick-toggle" data-assignment-id="' + assignment.id + '" data-unit="' + unit + '" ' + (getRecord(assignment.id, unit).done ? 'checked' : '') + '></td>');
+        else {
+          var unitName = bookUnitName(book, unit);
+          cells.push('<td class="quick-unit-cell"><label class="quick-unit-check" title="' + escapeHtml(unitName) + '"><input type="checkbox" data-action="quick-toggle" data-assignment-id="' + assignment.id + '" data-unit="' + unit + '" aria-label="' + escapeHtml(book.name + ' ' + unitName) + '" ' + (getRecord(assignment.id, unit).done ? 'checked' : '') + '><span>' + escapeHtml(unitName) + '</span></label></td>');
+        }
       }
       return '<tr><td>' + escapeHtml(teacherNamesForStudent(student)) + '</td><td>' + escapeHtml(student.name) + '</td><td>' + escapeHtml(book.name) + '</td>' + cells.join('') + '<td class="numeric">' + totals.done + '/' + totals.total + '</td><td class="numeric">' + totals.rate + '%</td></tr>';
     }).join('');
@@ -1250,7 +1276,7 @@
   function addTeacher(form) { var data = new FormData(form); var name = String(data.get('name') || '').trim(); if (!name) return; state.teachers.push({ id: uid('teacher'), name: name, memo: String(data.get('memo') || '').trim() }); saveState(); render(); }
   function addHomework(form) { var data = new FormData(form); var studentId = String(data.get('studentId') || '').trim(); var title = String(data.get('title') || '').trim(); if (!studentId || !title) return; var student = getStudent(studentId); var teacherIds = studentTeacherIds(student); state.homework.push({ id: uid('hw'), studentId: studentId, teacherIds: teacherIds, teacherId: teacherIds[0] || '', title: title, dueDate: String(data.get('dueDate') || '').trim(), status: String(data.get('status') || 'todo'), memo: String(data.get('memo') || '').trim(), createdAt: new Date().toISOString() }); saveState(); render(); }
   function addConsultation(form) { var data = new FormData(form); var studentId = String(data.get('studentId') || '').trim(); var content = String(data.get('content') || '').trim(); if (!studentId || !content) return; var student = getStudent(studentId); var teacherIds = studentTeacherIds(student); state.consultations.unshift({ id: uid('note'), studentId: studentId, teacherIds: teacherIds, teacherId: teacherIds[0] || '', type: String(data.get('type') || '상담 메모'), date: String(data.get('date') || todayString()), content: content, createdAt: new Date().toISOString() }); saveState(); renderStudentDetail(); }
-  function addBook(form) { var data = new FormData(form); var name = String(data.get('name') || '').trim(); if (!name) return; state.books.push({ id: uid('book'), name: name, unitCount: clampUnitCount(data.get('unitCount')), memo: String(data.get('memo') || '').trim() }); saveState(); render(); }
+  function addBook(form) { var data = new FormData(form); var name = String(data.get('name') || '').trim(); if (!name) return; var unitCount = clampUnitCount(data.get('unitCount')); var book = normalizeBookUnits({ id: uid('book'), name: name, unitCount: unitCount, unitNames: [], memo: String(data.get('memo') || '').trim() }); state.books.push(book); ui.editingBookId = book.id; saveState(); render(); }
 
   function deleteStudent(studentId) {
     var student = getStudent(studentId); if (!student) return; if (!confirm(student.name + ' 학생을 삭제할까요?')) return;
@@ -1287,7 +1313,7 @@
     state.books = state.books.filter(function (item) { return item.id !== bookId; });
     state.assignments = state.assignments.filter(function (a) { return a.bookId !== bookId; });
     Object.keys(state.progress).forEach(function (key) { if (assignmentIds.some(function (id) { return key.indexOf(id + ':') === 0; })) delete state.progress[key]; });
-    if (ui.progressBookId === bookId) ui.progressBookId = 'all'; if (ui.quickBookId === bookId) ui.quickBookId = 'all';
+    if (ui.progressBookId === bookId) ui.progressBookId = 'all'; if (ui.quickBookId === bookId) ui.quickBookId = 'all'; if (ui.editingBookId === bookId) ui.editingBookId = null;
     saveState(); render();
   }
 
@@ -1323,7 +1349,8 @@
     if (action === 'update-homework' && homeworkRow) { var homework = state.homework.find(function (item) { return item.id === homeworkRow.dataset.homeworkId; }); if (!homework) return; homework[target.dataset.field] = target.value.trim(); saveState(); render(); }
     if (action === 'update-consult-setting') updateConsultationSetting(target.dataset.studentId, target.dataset.field, target.value, target.checked);
     if (action === 'update-consult-schedule' && consultRow) { var consult = (state.consultationSchedule || []).find(function (item) { return item.id === consultRow.dataset.consultId; }); if (!consult) return; consult[target.dataset.field] = target.value.trim(); saveState(); render(); }
-    if (action === 'update-book' && bookRow) { var book = getBook(bookRow.dataset.bookId); if (!book) return; if (target.dataset.field === 'unitCount') book.unitCount = clampUnitCount(target.value); else book[target.dataset.field] = target.value.trim(); saveState(); render(); }
+    if (action === 'update-book' && bookRow) { var book = getBook(bookRow.dataset.bookId); if (!book) return; if (target.dataset.field === 'unitCount') { book.unitCount = clampUnitCount(target.value); normalizeBookUnits(book); } else book[target.dataset.field] = target.value.trim(); saveState(); render(); }
+    if (action === 'update-unit-name') { var unitBook = getBook(target.dataset.bookId); if (!unitBook) return; normalizeBookUnits(unitBook); var unitIndex = Number(target.dataset.unitIndex); if (unitIndex < 0 || unitIndex >= unitBook.unitCount) return; unitBook.unitNames[unitIndex] = target.value.trim(); saveState(); }
     if (action === 'toggle-assignment') toggleAssignment(target.dataset.studentId, target.dataset.bookId, target.checked);
     if (action === 'toggle-progress' && progressRow) { var old = getRecord(progressRow.dataset.assignmentId, Number(progressRow.dataset.unit)); setRecord(progressRow.dataset.assignmentId, Number(progressRow.dataset.unit), { done: target.checked, date: target.checked ? old.date || new Date().toISOString().slice(0, 10) : old.date }); render(); }
     if (action === 'update-progress-date' && progressRow) setRecord(progressRow.dataset.assignmentId, Number(progressRow.dataset.unit), { date: target.value });
@@ -1360,6 +1387,8 @@
     if (action === 'delete-student') deleteStudent(target.closest('[data-student-id]').dataset.studentId);
     if (action === 'delete-teacher') deleteTeacher(target.closest('[data-teacher-id]').dataset.teacherId);
     if (action === 'delete-book') deleteBook(target.closest('[data-book-id]').dataset.bookId);
+    if (action === 'edit-book-units') { ui.editingBookId = target.closest('[data-book-id]').dataset.bookId; renderBooks(); }
+    if (action === 'close-book-units') { ui.editingBookId = null; renderBooks(); }
     if (action === 'select-assignment-student') { ui.selectedStudentId = target.dataset.studentId; render(); }
     if (action === 'open-detail-student') { ui.detailStudentId = target.dataset.studentId; var studentForDetail = getStudent(ui.detailStudentId); ui.detailTeacherId = firstTeacherIdForStudent(studentForDetail) || 'all'; ui.activeTab = 'detail'; render(); }
     if (target.id === 'dataExportJson') exportJson();

@@ -88,6 +88,7 @@ h3 { margin: 0; font-size: 15px; }
 .primary-button { background: var(--blue); color: #fff; }
 .secondary-button { background: var(--surface); color: var(--text); border-color: var(--line); }
 .danger-button { background: #fff5f5; color: var(--red); border-color: #fecaca; }
+.compact-button { min-height: 30px; padding: 5px 9px; font-size: 12px; }
 .table-wrap { overflow: auto; }
 table { width: 100%; border-collapse: collapse; table-layout: fixed; background: var(--surface); }
 th, td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: middle; overflow-wrap: anywhere; }
@@ -115,7 +116,13 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
 .quick-table { min-width: 980px; }
 .quick-table th, .quick-table td { text-align: center; padding: 7px; }
 .quick-table th:first-child, .quick-table td:first-child, .quick-table th:nth-child(2), .quick-table td:nth-child(2) { text-align: left; }
+.quick-unit-cell { min-width: 88px; }
+.quick-unit-check { display: grid; justify-items: center; gap: 4px; color: var(--muted); font-size: 10px; line-height: 1.25; }
+.quick-unit-check span { width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .progress-unit-table { min-width: 620px; }
+.unit-name-count { color: var(--muted); font-size: 12px; font-weight: 800; }
+.unit-name-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.unit-name-field { display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: center; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 800; }
 .empty-state { display: grid; gap: 4px; padding: 28px; border: 1px dashed var(--line); border-radius: 8px; background: #fbfcfe; color: var(--muted); text-align: center; }
 .empty-state strong { color: var(--text); }
 .data-actions { display: flex; flex-wrap: wrap; gap: 8px; }
