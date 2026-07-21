@@ -14,9 +14,12 @@
     progressStudentId: null,
     progressBookId: null,
     progressUnit: 'all',
-    progressStatus: 'all',
+    progressStatus: 'todo',
     progressQuery: '',
-    showProgressFilters: false,
+    progressRangeStart: 1,
+    progressRangeEnd: 1,
+    progressLastBulk: null,
+    expandedProgressKey: null,
     alertsTeacherId: 'all',
     detailTeacherId: 'all',
     detailStudentId: null,
@@ -1294,9 +1297,9 @@
         var checked = selectedTeacherIds.indexOf(teacher.id) !== -1;
         return '<label class="teacher-check"><input type="checkbox" data-action="toggle-student-teacher" data-student-id="' + student.id + '" data-teacher-id="' + teacher.id + '" ' + (checked ? 'checked' : '') + '><span>' + escapeHtml(teacher.name) + '</span></label>';
       }).join('') : '<span class="muted">선생님을 먼저 추가하세요</span>';
-      return '<tr data-student-id="' + student.id + '"><td><input class="field" data-action="update-student" data-field="name" value="' + escapeHtml(student.name) + '"></td><td><div class="teacher-check-list">' + teacherChecks + '</div></td><td><input class="field" data-action="update-student" data-field="memo" value="' + escapeHtml(student.memo) + '"></td><td><div class="row-actions"><button class="mini-button" data-action="open-detail-student" data-student-id="' + student.id + '" title="상세" aria-label="상세">&gt;</button><button class="mini-button danger" data-action="delete-student" title="삭제" aria-label="삭제">×</button></div></td></tr>';
+      return '<tr data-student-id="' + student.id + '"><td data-label="학생 이름"><input class="field" data-action="update-student" data-field="name" value="' + escapeHtml(student.name) + '"></td><td data-label="담당 선생님"><div class="teacher-check-list">' + teacherChecks + '</div></td><td data-label="메모"><input class="field" data-action="update-student" data-field="memo" value="' + escapeHtml(student.memo) + '"></td><td data-label="관리"><div class="row-actions"><button class="mini-button" data-action="open-detail-student" data-student-id="' + student.id + '" title="상세" aria-label="상세">&gt;</button><button class="mini-button danger" data-action="delete-student" title="삭제" aria-label="삭제">×</button></div></td></tr>';
     }).join('');
-    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>학생</h2><p>' + filteredStudents.length + '/' + state.students.length + '명</p></div><div class="toolbar"><select class="select" id="studentTeacherFilter">' + teacherOptions(ui.studentTeacherId, true, true) + '</select></div></div><section class="panel"><div class="panel-body"><form class="form-grid student-form" id="studentForm"><input class="field" name="name" placeholder="학생 이름" required><select class="select" name="teacherId"><option value="">담당 미지정</option>' + state.teachers.map(function (teacher) { return '<option value="' + teacher.id + '">' + escapeHtml(teacher.name) + '</option>'; }).join('') + '</select><input class="field" name="memo" placeholder="메모"><button class="primary-button" type="submit">추가</button></form></div><div class="table-wrap"><table><thead><tr><th>학생 이름</th><th>선생님</th><th>메모</th><th class="numeric">관리</th></tr></thead><tbody>' + (rows || '<tr><td colspan="4">' + emptyState('표시할 학생이 없습니다', '필터를 바꾸거나 학생을 추가하세요.') + '</td></tr>') + '</tbody></table></div></section></div>';
+    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>학생</h2><p>' + filteredStudents.length + '/' + state.students.length + '명</p></div><div class="toolbar"><select class="select" id="studentTeacherFilter">' + teacherOptions(ui.studentTeacherId, true, true) + '</select></div></div><section class="panel"><div class="panel-body"><form class="form-grid student-form" id="studentForm"><input class="field" name="name" placeholder="학생 이름" required><select class="select" name="teacherId"><option value="">담당 미지정</option>' + state.teachers.map(function (teacher) { return '<option value="' + teacher.id + '">' + escapeHtml(teacher.name) + '</option>'; }).join('') + '</select><input class="field" name="memo" placeholder="메모"><button class="primary-button" type="submit">추가</button></form></div><div class="table-wrap students-table-wrap"><table class="students-table"><thead><tr><th>학생 이름</th><th>선생님</th><th>메모</th><th class="numeric">관리</th></tr></thead><tbody>' + (rows || '<tr><td colspan="4">' + emptyState('표시할 학생이 없습니다', '필터를 바꾸거나 학생을 추가하세요.') + '</td></tr>') + '</tbody></table></div></section></div>';
   }
 
   function renderTeachers() {
@@ -1351,15 +1354,13 @@
   }
 
   function filteredProgressRows() {
-    var query = ui.progressQuery.trim().toLowerCase();
     return progressRows().filter(function (row) {
       if (row.student.id !== ui.progressStudentId) return false;
       if (!ui.progressBookId || row.book.id !== ui.progressBookId) return false;
       if (ui.progressUnit !== 'all' && row.unit !== Number(ui.progressUnit)) return false;
       if (ui.progressStatus === 'done' && !row.done) return false;
       if (ui.progressStatus === 'todo' && row.done) return false;
-      if (!query) return true;
-      return (teacherNamesForStudent(row.student) + ' ' + row.student.name + ' ' + row.book.name + ' ' + row.unitName + ' ' + row.memo).toLowerCase().includes(query);
+      return true;
     }).sort(function (a, b) {
       return a.student.name.localeCompare(b.student.name) || a.book.name.localeCompare(b.book.name) || a.unit - b.unit;
     });
@@ -1374,23 +1375,88 @@
     return options.join('');
   }
 
+  function progressRangeUnitOptions(book, selectedUnit) {
+    if (!book) return '<option value="1">단원 없음</option>';
+    var selected = Number(selectedUnit || 1);
+    var options = [];
+    for (var unit = 1; unit <= book.unitCount; unit += 1) {
+      options.push('<option value="' + unit + '" ' + (selected === unit ? 'selected' : '') + '>' + escapeHtml(homeworkUnitLabel(book, unit)) + '</option>');
+    }
+    return options.join('');
+  }
+
+  function completeProgressRange() {
+    var assignment = getAssignment(ui.progressStudentId, ui.progressBookId);
+    var book = getBook(ui.progressBookId);
+    if (!assignment || !book || !assignment.active) return;
+    var start = Math.max(1, Math.min(book.unitCount, Number(ui.progressRangeStart || 1)));
+    var end = Math.max(start, Math.min(book.unitCount, Number(ui.progressRangeEnd || start)));
+    var previous = [];
+    for (var unit = start; unit <= end; unit += 1) {
+      var key = progressKey(assignment.id, unit);
+      previous.push({ unit: unit, existed: Object.prototype.hasOwnProperty.call(state.progress, key), record: Object.assign({}, getRecord(assignment.id, unit)) });
+      state.progress[key] = Object.assign({}, getRecord(assignment.id, unit), { done: true, date: getRecord(assignment.id, unit).date || todayString() });
+    }
+    ui.progressLastBulk = { assignmentId: assignment.id, studentId: assignment.studentId, bookId: assignment.bookId, previous: previous };
+    saveState();
+    renderProgress();
+  }
+
+  function undoProgressRange() {
+    var bulk = ui.progressLastBulk;
+    if (!bulk || bulk.studentId !== ui.progressStudentId || bulk.bookId !== ui.progressBookId) return;
+    bulk.previous.forEach(function (item) {
+      var key = progressKey(bulk.assignmentId, item.unit);
+      if (item.existed) state.progress[key] = item.record;
+      else delete state.progress[key];
+    });
+    ui.progressLastBulk = null;
+    saveState();
+    renderProgress();
+  }
+
   function renderProgress() {
     if (!ui.progressStudentId || !getStudent(ui.progressStudentId)) ui.progressStudentId = state.students[0] ? state.students[0].id : null;
     var assignedBooks = assignedBooksForStudent(ui.progressStudentId);
-    if (!assignedBooks.some(function (book) { return book.id === ui.progressBookId; })) ui.progressBookId = assignedBooks[0] ? assignedBooks[0].id : null;
+    if (!assignedBooks.some(function (book) { return book.id === ui.progressBookId; })) {
+      ui.progressBookId = assignedBooks[0] ? assignedBooks[0].id : null;
+      ui.progressRangeStart = 1;
+      ui.progressRangeEnd = assignedBooks[0] ? assignedBooks[0].unitCount : 1;
+      ui.progressLastBulk = null;
+      ui.expandedProgressKey = null;
+    }
     var selectedBook = getBook(ui.progressBookId);
     if (ui.progressUnit !== 'all' && (!selectedBook || Number(ui.progressUnit) < 1 || Number(ui.progressUnit) > selectedBook.unitCount)) ui.progressUnit = 'all';
+    var maxUnit = selectedBook ? Math.max(1, selectedBook.unitCount) : 1;
+    ui.progressRangeStart = Math.max(1, Math.min(maxUnit, Number(ui.progressRangeStart || 1)));
+    ui.progressRangeEnd = Math.max(ui.progressRangeStart, Math.min(maxUnit, Number(ui.progressRangeEnd || maxUnit)));
     var filtered = filteredProgressRows();
     var selectedStudent = getStudent(ui.progressStudentId);
     var selectedAssignment = selectedStudent && selectedBook ? getAssignment(selectedStudent.id, selectedBook.id) : null;
     var selectedTotals = selectedAssignment ? assignmentTotals(selectedAssignment) : { done: 0, total: 0, rate: 0 };
     var scopeText = selectedStudent && selectedBook ? selectedStudent.name + ' 학생 · ' + selectedBook.name + ' · ' + selectedTotals.done + '/' + selectedTotals.total + '단원 완료 · ' + selectedTotals.rate + '%' : (selectedStudent ? selectedStudent.name + ' 학생 · 배정된 책이 없습니다.' : '학생이 없습니다.');
+    var progressQuery = ui.progressQuery.trim().toLowerCase();
+    var visibleSearchRows = 0;
     var rows = filtered.map(function (row) {
-      return '<tr data-assignment-id="' + row.assignment.id + '" data-unit="' + row.unit + '"><td>' + escapeHtml(row.student.name) + '</td><td>' + escapeHtml(row.book.name) + '</td><td class="numeric">' + row.unit + '</td><td>' + escapeHtml(row.unitName) + '</td><td><input type="checkbox" data-action="toggle-progress" ' + (row.done ? 'checked' : '') + '></td><td><input class="field" type="date" data-action="update-progress-date" value="' + escapeHtml(row.date) + '"></td><td><input class="field" data-action="update-progress-memo" value="' + escapeHtml(row.memo) + '"></td><td><span class="status-badge ' + (row.done ? 'done' : 'todo') + '">' + (row.done ? '완료' : '미완료') + '</span></td></tr>';
+      var rowKey = progressKey(row.assignment.id, row.unit);
+      var expanded = ui.expandedProgressKey === rowKey;
+      var subText = row.done && row.date ? '완료 ' + row.date : '미완료';
+      if (row.memo) subText += ' · ' + row.memo;
+      var searchText = (teacherNamesForStudent(row.student) + ' ' + row.student.name + ' ' + row.book.name + ' ' + row.unitName + ' ' + row.memo).toLowerCase();
+      var hiddenBySearch = !!progressQuery && !searchText.includes(progressQuery);
+      if (!hiddenBySearch) visibleSearchRows += 1;
+      var detail = expanded ? '<div class="progress-check-detail"><label class="stacked-field"><span>체크일</span><input class="field" type="date" data-action="update-progress-date" value="' + escapeHtml(row.date) + '"></label><label class="stacked-field progress-detail-memo"><span>메모</span><input class="field" data-action="update-progress-memo" value="' + escapeHtml(row.memo) + '" placeholder="이해도, 오답, 다음 수업 메모"></label></div>' : '';
+      return '<div class="progress-check-row ' + (row.done ? 'is-done' : '') + '" data-assignment-id="' + row.assignment.id + '" data-unit="' + row.unit + '" data-search="' + escapeHtml(searchText) + '"' + (hiddenBySearch ? ' hidden' : '') + '><div class="progress-check-summary"><label class="progress-check-main"><input class="progress-check-input" type="checkbox" data-action="toggle-progress" aria-label="' + escapeHtml(row.unitName + ' 완료') + '" ' + (row.done ? 'checked' : '') + '><span class="progress-unit-number">' + row.unit + '</span><span class="progress-unit-copy"><strong>' + escapeHtml(row.unitName) + '</strong><small>' + escapeHtml(subText) + '</small></span></label><span class="status-badge ' + (row.done ? 'done' : 'todo') + '">' + (row.done ? '완료' : '미완료') + '</span><button class="mini-button" type="button" data-action="toggle-progress-detail" data-progress-key="' + rowKey + '" title="상세 기록" aria-label="상세 기록" aria-expanded="' + (expanded ? 'true' : 'false') + '">⋯</button></div>' + detail + '</div>';
     }).join('');
-    var advanced = ui.showProgressFilters ? '<div class="filters advanced-filters progress-filters"><select class="select" id="progressStatusFilter"><option value="all" ' + (ui.progressStatus === 'all' ? 'selected' : '') + '>전체 상태</option><option value="todo" ' + (ui.progressStatus === 'todo' ? 'selected' : '') + '>미완료</option><option value="done" ' + (ui.progressStatus === 'done' ? 'selected' : '') + '>완료</option></select><input class="field" id="progressQuery" value="' + escapeHtml(ui.progressQuery) + '" placeholder="단원명·메모 검색"></div>' : '';
     var disabled = selectedBook ? '' : ' disabled';
-    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>진도 체크</h2><p>' + escapeHtml(scopeText) + '</p></div></div><section class="panel"><div class="panel-body"><div class="progress-primary-filters"><label class="stacked-field"><span>학생</span><select class="select" id="progressStudentFilter">' + studentOptions(ui.progressStudentId, false, 'all') + '</select></label><label class="stacked-field"><span>책</span><select class="select" id="progressBookSelect"' + disabled + '>' + homeworkBookOptions(ui.progressStudentId, ui.progressBookId, false) + '</select></label><label class="stacked-field"><span>단원</span><select class="select" id="progressUnitFilter"' + disabled + '>' + progressUnitOptions(selectedBook, ui.progressUnit) + '</select></label><button class="secondary-button" id="toggleProgressFilters">필터</button></div>' + advanced + '</div><div class="table-wrap"><table><thead><tr><th>학생</th><th>책</th><th class="numeric">단원</th><th>단원명</th><th>완료</th><th>체크일</th><th>메모</th><th>상태</th></tr></thead><tbody>' + (rows || '<tr><td colspan="8">' + emptyState('표시할 단원이 없습니다', selectedBook ? '다른 단원이나 상태 조건을 선택하세요.' : '선택한 학생에게 사용할 책을 배정하세요.') + '</td></tr>') + '</tbody></table></div></section></div>';
+    var statusButtons = [{ id: 'todo', label: '미완료' }, { id: 'done', label: '완료' }, { id: 'all', label: '전체' }].map(function (item) {
+      return '<button type="button" class="segment-button ' + (ui.progressStatus === item.id ? 'active' : '') + '" data-action="select-progress-status" data-status="' + item.id + '">' + item.label + '</button>';
+    }).join('');
+    var canUndo = ui.progressLastBulk && ui.progressLastBulk.studentId === ui.progressStudentId && ui.progressLastBulk.bookId === ui.progressBookId;
+    var bulkActions = selectedBook ? '<details class="progress-bulk"><summary>단원 범위 일괄 체크</summary><div class="progress-bulk-controls"><label class="stacked-field"><span>시작</span><select class="select" id="progressRangeStart">' + progressRangeUnitOptions(selectedBook, ui.progressRangeStart) + '</select></label><label class="stacked-field"><span>끝</span><select class="select" id="progressRangeEnd">' + progressRangeUnitOptions(selectedBook, ui.progressRangeEnd) + '</select></label><button class="primary-button" id="completeProgressRange" type="button">범위 완료</button><button class="secondary-button" id="undoProgressRange" type="button" ' + (canUndo ? '' : 'disabled') + '>되돌리기</button></div></details>' : '';
+    var rowList = rows || emptyState('표시할 단원이 없습니다', selectedBook ? '다른 단원이나 보기 조건을 선택하세요.' : '선택한 학생에게 사용할 책을 배정하세요.');
+    if (rows) rowList += '<div class="empty-state progress-search-empty" id="progressSearchEmpty"' + (visibleSearchRows ? ' hidden' : '') + '><strong>검색 결과가 없습니다</strong><span>다른 단원명이나 메모를 입력하세요.</span></div>';
+    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>진도 체크</h2><p>' + escapeHtml(scopeText) + '</p></div></div><section class="panel"><div class="panel-body progress-controls"><div class="progress-primary-filters"><label class="stacked-field"><span>학생</span><select class="select" id="progressStudentFilter">' + studentOptions(ui.progressStudentId, false, 'all') + '</select></label><label class="stacked-field"><span>책</span><select class="select" id="progressBookSelect"' + disabled + '>' + homeworkBookOptions(ui.progressStudentId, ui.progressBookId, false) + '</select></label><label class="stacked-field"><span>단원</span><select class="select" id="progressUnitFilter"' + disabled + '>' + progressUnitOptions(selectedBook, ui.progressUnit) + '</select></label></div><div class="progress-list-tools"><div class="segmented-control" role="group" aria-label="진도 상태">' + statusButtons + '</div><input class="field" id="progressQuery" value="' + escapeHtml(ui.progressQuery) + '" placeholder="단원명·메모 검색"></div>' + bulkActions + '</div><div class="progress-check-list">' + rowList + '</div></section></div>';
   }
 
   function renderQuick() {
@@ -1492,7 +1558,7 @@
     if (state.consultationSettings) delete state.consultationSettings[studentId];
     Object.keys(state.progress).forEach(function (key) { if (assignmentIds.some(function (id) { return key.indexOf(id + ':') === 0; })) delete state.progress[key]; });
     if (ui.selectedStudentId === studentId) ui.selectedStudentId = state.students[0] ? state.students[0].id : null;
-    if (ui.progressStudentId === studentId) { ui.progressStudentId = state.students[0] ? state.students[0].id : null; ui.progressBookId = null; ui.progressUnit = 'all'; }
+    if (ui.progressStudentId === studentId) { ui.progressStudentId = state.students[0] ? state.students[0].id : null; ui.progressBookId = null; ui.progressUnit = 'all'; ui.progressRangeStart = 1; ui.progressRangeEnd = 1; ui.progressLastBulk = null; ui.expandedProgressKey = null; }
     if (ui.aiStudentId === studentId) ui.aiStudentId = state.students[0] ? state.students[0].id : null;
     saveState(); render();
   }
@@ -1518,7 +1584,7 @@
     state.assignments = state.assignments.filter(function (a) { return a.bookId !== bookId; });
     state.homework.forEach(function (item) { if (item.bookId === bookId) item.bookId = ''; });
     Object.keys(state.progress).forEach(function (key) { if (assignmentIds.some(function (id) { return key.indexOf(id + ':') === 0; })) delete state.progress[key]; });
-    if (ui.progressBookId === bookId) { ui.progressBookId = null; ui.progressUnit = 'all'; } if (ui.quickBookId === bookId) ui.quickBookId = 'all'; if (ui.homeworkBookId === bookId) ui.homeworkBookId = 'all'; if (ui.homeworkFormBookId === bookId) ui.homeworkFormBookId = null; if (ui.editingBookId === bookId) ui.editingBookId = null;
+    if (ui.progressBookId === bookId) { ui.progressBookId = null; ui.progressUnit = 'all'; ui.progressRangeStart = 1; ui.progressRangeEnd = 1; ui.progressLastBulk = null; ui.expandedProgressKey = null; } if (ui.quickBookId === bookId) ui.quickBookId = 'all'; if (ui.homeworkBookId === bookId) ui.homeworkBookId = 'all'; if (ui.homeworkFormBookId === bookId) ui.homeworkFormBookId = null; if (ui.editingBookId === bookId) ui.editingBookId = null;
     saveState(); render();
   }
 
@@ -1530,7 +1596,7 @@
     file.text().then(function (text) {
       var imported = JSON.parse(text);
       if (!imported.students || !imported.books || !imported.assignments || !imported.progress) { alert('가져올 수 없는 파일입니다.'); return; }
-      state = normalizeState(imported); saveState(); ui.selectedStudentId = firstStudentIdForTeacher(ui.assignmentTeacherId); ui.progressStudentId = state.students[0] ? state.students[0].id : null; ui.progressBookId = null; ui.progressUnit = 'all'; ui.aiStudentId = firstStudentIdForTeacher(ui.aiTeacherId); ui.aiWritingTeacherId = null; render();
+      state = normalizeState(imported); saveState(); ui.selectedStudentId = firstStudentIdForTeacher(ui.assignmentTeacherId); ui.progressStudentId = state.students[0] ? state.students[0].id : null; ui.progressBookId = null; ui.progressUnit = 'all'; ui.progressRangeStart = 1; ui.progressRangeEnd = 1; ui.progressLastBulk = null; ui.expandedProgressKey = null; ui.aiStudentId = firstStudentIdForTeacher(ui.aiTeacherId); ui.aiWritingTeacherId = null; render();
     }).catch(function () { alert('파일을 읽지 못했습니다.'); });
   }
 
@@ -1561,9 +1627,9 @@
     if (action === 'update-book' && bookRow) { var book = getBook(bookRow.dataset.bookId); if (!book) return; if (target.dataset.field === 'unitCount') { book.unitCount = clampUnitCount(target.value); normalizeBookUnits(book); } else book[target.dataset.field] = target.value.trim(); state.homework.forEach(function (item) { if (item.bookId === book.id) applyHomeworkBookRange(item, book.id, item.startUnit, item.endUnit); }); saveState(); render(); }
     if (action === 'update-unit-name') { var unitBook = getBook(target.dataset.bookId); if (!unitBook) return; normalizeBookUnits(unitBook); var unitIndex = Number(target.dataset.unitIndex); if (unitIndex < 0 || unitIndex >= unitBook.unitCount) return; unitBook.unitNames[unitIndex] = target.value.trim(); state.homework.forEach(function (item) { if (item.bookId === unitBook.id) applyHomeworkBookRange(item, unitBook.id, item.startUnit, item.endUnit); }); saveState(); }
     if (action === 'toggle-assignment') toggleAssignment(target.dataset.studentId, target.dataset.bookId, target.checked);
-    if (action === 'toggle-progress' && progressRow) { var old = getRecord(progressRow.dataset.assignmentId, Number(progressRow.dataset.unit)); setRecord(progressRow.dataset.assignmentId, Number(progressRow.dataset.unit), { done: target.checked, date: target.checked ? old.date || new Date().toISOString().slice(0, 10) : old.date }); render(); }
-    if (action === 'update-progress-date' && progressRow) setRecord(progressRow.dataset.assignmentId, Number(progressRow.dataset.unit), { date: target.value });
-    if (action === 'update-progress-memo' && progressRow) setRecord(progressRow.dataset.assignmentId, Number(progressRow.dataset.unit), { memo: target.value.trim() });
+    if (action === 'toggle-progress' && progressRow) { var old = getRecord(progressRow.dataset.assignmentId, Number(progressRow.dataset.unit)); ui.progressLastBulk = null; setRecord(progressRow.dataset.assignmentId, Number(progressRow.dataset.unit), { done: target.checked, date: target.checked ? old.date || new Date().toISOString().slice(0, 10) : old.date }); render(); }
+    if (action === 'update-progress-date' && progressRow) { ui.progressLastBulk = null; setRecord(progressRow.dataset.assignmentId, Number(progressRow.dataset.unit), { date: target.value }); }
+    if (action === 'update-progress-memo' && progressRow) { ui.progressLastBulk = null; setRecord(progressRow.dataset.assignmentId, Number(progressRow.dataset.unit), { memo: target.value.trim() }); }
     if (action === 'quick-toggle') { var prior = getRecord(target.dataset.assignmentId, Number(target.dataset.unit)); setRecord(target.dataset.assignmentId, Number(target.dataset.unit), { done: target.checked, date: target.checked ? prior.date || new Date().toISOString().slice(0, 10) : prior.date }); render(); }
     if (target.id === 'alertsTeacherFilter') { ui.alertsTeacherId = target.value; render(); }
     if (target.id === 'dashboardTeacherFilter') { ui.dashboardTeacherId = target.value; render(); }
@@ -1581,10 +1647,11 @@
     if (target.id === 'homeworkFormEndUnit') { ui.homeworkFormEndUnit = Number(target.value || ui.homeworkFormStartUnit); }
     if (target.id === 'consultTeacherFilter') { ui.consultTeacherId = target.value; ui.consultDraft = []; ui.consultConflicts = []; render(); }
     if (target.id === 'consultWeeks') { ui.consultWeeks = Number(target.value || 4); render(); }
-    if (target.id === 'progressStudentFilter') { ui.progressStudentId = target.value; ui.progressBookId = null; ui.progressUnit = 'all'; render(); }
-    if (target.id === 'progressBookSelect') { ui.progressBookId = target.value; ui.progressUnit = 'all'; render(); }
-    if (target.id === 'progressUnitFilter') { ui.progressUnit = target.value; render(); }
-    if (target.id === 'progressStatusFilter') { ui.progressStatus = target.value; render(); }
+    if (target.id === 'progressStudentFilter') { ui.progressStudentId = target.value; ui.progressBookId = null; ui.progressUnit = 'all'; ui.progressRangeStart = 1; ui.progressRangeEnd = 1; ui.progressLastBulk = null; ui.expandedProgressKey = null; render(); }
+    if (target.id === 'progressBookSelect') { ui.progressBookId = target.value; ui.progressUnit = 'all'; ui.progressRangeStart = 1; var rangeBook = getBook(target.value); ui.progressRangeEnd = rangeBook ? rangeBook.unitCount : 1; ui.progressLastBulk = null; ui.expandedProgressKey = null; render(); }
+    if (target.id === 'progressUnitFilter') { ui.progressUnit = target.value; ui.expandedProgressKey = null; render(); }
+    if (target.id === 'progressRangeStart') { ui.progressRangeStart = Number(target.value || 1); if (ui.progressRangeEnd < ui.progressRangeStart) ui.progressRangeEnd = ui.progressRangeStart; }
+    if (target.id === 'progressRangeEnd') { ui.progressRangeEnd = Math.max(ui.progressRangeStart, Number(target.value || ui.progressRangeStart)); }
     if (target.id === 'quickTeacherFilter') { ui.quickTeacherId = target.value; render(); }
     if (target.id === 'quickBookFilter') { ui.quickBookId = target.value; render(); }
     if (target.id === 'aiTeacherFilter') { ui.aiTeacherId = target.value; ui.aiStudentId = firstStudentIdForTeacher(ui.aiTeacherId); ui.aiWritingTeacherId = null; setAiStatus(''); renderAiEvaluation(); }
@@ -1616,7 +1683,10 @@
     if (target.id === 'buildConsultSchedule') { buildConsultationDraft(); renderConsultSchedule(); }
     if (target.id === 'saveConsultDraft') saveConsultationDraft();
     if (target.id === 'clearConsultDraft') { ui.consultDraft = []; ui.consultConflicts = []; renderConsultSchedule(); }
-    if (target.id === 'toggleProgressFilters') { ui.showProgressFilters = !ui.showProgressFilters; render(); }
+    if (action === 'select-progress-status') { ui.progressStatus = target.dataset.status; ui.expandedProgressKey = null; renderProgress(); }
+    if (action === 'toggle-progress-detail') { ui.expandedProgressKey = ui.expandedProgressKey === target.dataset.progressKey ? null : target.dataset.progressKey; renderProgress(); }
+    if (target.id === 'completeProgressRange') completeProgressRange();
+    if (target.id === 'undoProgressRange') undoProgressRange();
     if (target.id === 'toggleQuickFilters') { ui.showQuickFilters = !ui.showQuickFilters; render(); }
     if (target.id === 'toggleHomeworkFilters') { ui.showHomeworkFilters = !ui.showHomeworkFilters; render(); }
     if (action === 'delete-homework') deleteHomework(target.closest('[data-homework-id]').dataset.homeworkId);
@@ -1625,11 +1695,22 @@
     if (action === 'add-ai-keyword') addAiKeyword(target.dataset.keyword);
     if (target.id === 'clearAiKeywords') clearAiKeywords();
     if (action === 'delete-evaluation') deleteEvaluation(target.dataset.evaluationId);
-    if (target.id === 'resetData') { if (!confirm('초기 상태로 되돌릴까요?')) return; state = seedState(); saveState(); ui.selectedStudentId = state.students[0] ? state.students[0].id : null; ui.progressStudentId = state.students[0] ? state.students[0].id : null; ui.progressBookId = null; ui.progressUnit = 'all'; ui.aiStudentId = state.students[0] ? state.students[0].id : null; ui.aiWritingTeacherId = null; ui.aiDraft = ''; ui.aiKeywords = ''; render(); }
+    if (target.id === 'resetData') { if (!confirm('초기 상태로 되돌릴까요?')) return; state = seedState(); saveState(); ui.selectedStudentId = state.students[0] ? state.students[0].id : null; ui.progressStudentId = state.students[0] ? state.students[0].id : null; ui.progressBookId = null; ui.progressUnit = 'all'; ui.progressRangeStart = 1; ui.progressRangeEnd = 1; ui.progressLastBulk = null; ui.expandedProgressKey = null; ui.aiStudentId = state.students[0] ? state.students[0].id : null; ui.aiWritingTeacherId = null; ui.aiDraft = ''; ui.aiKeywords = ''; render(); }
   });
 
   document.addEventListener('input', function (event) {
-    if (event.target.id === 'progressQuery') { ui.progressQuery = event.target.value; renderProgress(); }
+    if (event.target.id === 'progressQuery') {
+      ui.progressQuery = event.target.value;
+      var progressSearchQuery = ui.progressQuery.trim().toLowerCase();
+      var visibleProgressRows = 0;
+      Array.prototype.forEach.call(document.querySelectorAll('.progress-check-row'), function (row) {
+        var visible = !progressSearchQuery || (row.dataset.search || '').includes(progressSearchQuery);
+        row.hidden = !visible;
+        if (visible) visibleProgressRows += 1;
+      });
+      var progressSearchEmpty = document.querySelector('#progressSearchEmpty');
+      if (progressSearchEmpty) progressSearchEmpty.hidden = visibleProgressRows > 0;
+    }
     if (event.target.id === 'aiKeywordsInput') ui.aiKeywords = event.target.value;
     if (event.target.id === 'aiDraftOutput') ui.aiDraft = event.target.value;
     if (event.target.id === 'consultStartDate') ui.consultStartDate = event.target.value || todayString();
