@@ -66,6 +66,7 @@
     aiStatus: 'AI에는 학생과 선생님의 실제 이름을 보내지 않습니다.',
     aiBusy: false,
     aiBatchBusy: false,
+    aiBatchSource: 'queue',
     aiDuplicateWarning: '',
     aiLastUsage: null,
     aiSearchQuery: '',
@@ -798,6 +799,30 @@
     return localDateString(new Date(value));
   }
 
+  function todayHomeworkGroups(teacherId) {
+    var groups = {};
+    (state.homework || []).forEach(function (item) {
+      if (evaluationDate(item) !== todayString()) return;
+      var student = getStudent(item.studentId);
+      if (!student) return;
+      var teacherIds = normalizeTeacherIdList(item.teacherIds || item.teacherId);
+      if (!teacherIds.length) teacherIds = studentTeacherIds(student);
+      if (teacherId && teacherId !== 'all' && teacherIds.indexOf(teacherId) === -1) return;
+      if (!groups[student.id]) groups[student.id] = { student: student, items: [] };
+      groups[student.id].items.push(item);
+    });
+    return Object.keys(groups).map(function (studentId) { return groups[studentId]; }).sort(function (a, b) {
+      return String(a.student.name || '').localeCompare(String(b.student.name || ''));
+    });
+  }
+
+  function todayHomeworkBatchText(items) {
+    var labels = (items || []).map(function (item) {
+      return homeworkBookName(item) + ' · ' + homeworkDisplayText(item);
+    });
+    return labels.length ? labels.join(' / ') : '오늘 등록한 숙제 없음';
+  }
+
   function daysSinceDate(dateString) {
     if (!dateString) return Infinity;
     var date = parseDateValue(dateString);
@@ -1236,6 +1261,33 @@
     });
   }
 
+  function openTodayHomeworkAiBatch() {
+    var teacherId = ui.homeworkTeacherId && getTeacher(ui.homeworkTeacherId) ? ui.homeworkTeacherId : '';
+    var allGroups = todayHomeworkGroups('all');
+    if (!teacherId) {
+      allGroups.some(function (group) {
+        var storedIds = group.items.reduce(function (ids, item) {
+          return ids.concat(normalizeTeacherIdList(item.teacherIds || item.teacherId));
+        }, []);
+        teacherId = storedIds.find(function (id) { return !!getTeacher(id); }) || firstTeacherIdForStudent(group.student) || '';
+        return !!teacherId;
+      });
+    }
+    if (!teacherId && state.teachers[0]) teacherId = state.teachers[0].id;
+    ui.aiBatchSource = 'homework';
+    ui.aiTeacherId = teacherId || 'all';
+    var groups = teacherId ? todayHomeworkGroups(teacherId) : allGroups;
+    ui.aiStudentId = groups[0] ? groups[0].student.id : firstStudentIdForTeacher(ui.aiTeacherId);
+    ui.aiWritingTeacherId = teacherId || null;
+    ui.aiKeywords = '';
+    ui.aiDraft = '';
+    ui.aiDraftMeta = null;
+    ui.aiDuplicateWarning = '';
+    ui.activeTab = 'ai';
+    setAiStatus(groups.length ? '오늘 숙제를 등록한 학생 ' + groups.length + '명을 불러왔습니다.' : '오늘 등록한 숙제가 없습니다.');
+    render();
+  }
+
   function deleteEvaluation(evaluationId) {
     if (!confirm('저장된 평가를 삭제할까요?')) return;
     state.evaluations = (state.evaluations || []).filter(function (item) { return item.id !== evaluationId; });
@@ -1651,7 +1703,7 @@
     }).join('');
     var advanced = ui.showHomeworkFilters ? '<div class="filters advanced-filters"><select class="select" id="homeworkStudentFilter">' + studentOptions(ui.homeworkStudentId, true, ui.homeworkTeacherId) + '</select><select class="select" id="homeworkBookFilter">' + bookOptions(ui.homeworkBookId, true) + '</select><select class="select" id="homeworkStatusFilter"><option value="all" ' + (ui.homeworkStatus === 'all' ? 'selected' : '') + '>전체 상태</option><option value="todo" ' + (ui.homeworkStatus === 'todo' ? 'selected' : '') + '>예정</option><option value="partial" ' + (ui.homeworkStatus === 'partial' ? 'selected' : '') + '>일부 완료</option><option value="done" ' + (ui.homeworkStatus === 'done' ? 'selected' : '') + '>완료</option><option value="missing" ' + (ui.homeworkStatus === 'missing' ? 'selected' : '') + '>미제출</option></select></div>' : '';
     var disabled = selection.student && selection.book ? '' : ' disabled';
-    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>숙제</h2><p>' + filteredHomework().length + '건</p></div></div><section class="panel"><div class="panel-body"><div class="filter-row"><select class="select" id="homeworkTeacherFilter">' + teacherOptions(ui.homeworkTeacherId, true, true) + '</select><button class="secondary-button" id="toggleHomeworkFilters">필터</button></div>' + advanced + '</div></section><section class="panel"><div class="panel-body"><form class="homework-form" id="homeworkForm"><label class="stacked-field"><span>학생</span><select class="select" id="homeworkFormStudent" name="studentId" required>' + studentOptions(ui.homeworkFormStudentId, false, ui.homeworkTeacherId) + '</select></label><label class="stacked-field"><span>책</span><select class="select" id="homeworkFormBook" name="bookId" required' + disabled + '>' + homeworkBookOptions(ui.homeworkFormStudentId, ui.homeworkFormBookId, false) + '</select></label><label class="stacked-field"><span>시작 단원</span><select class="select" id="homeworkFormStartUnit" name="startUnit"' + disabled + '>' + homeworkUnitOptions(selection.book, ui.homeworkFormStartUnit) + '</select></label><label class="stacked-field"><span>끝 단원</span><select class="select" id="homeworkFormEndUnit" name="endUnit"' + disabled + '>' + homeworkUnitOptions(selection.book, ui.homeworkFormEndUnit) + '</select></label><label class="stacked-field"><span>기한</span><input class="field" name="dueDate" type="date" value="' + todayString() + '"></label><label class="stacked-field"><span>상태</span><select class="select" name="status">' + homeworkStatusOptions('todo') + '</select></label><label class="stacked-field homework-memo"><span>메모</span><input class="field" name="memo" placeholder="메모"></label><button class="primary-button homework-add" type="submit"' + disabled + '>추가</button></form></div><div class="table-wrap"><table class="homework-table"><thead><tr><th>선생님</th><th>학생</th><th>책</th><th>숙제 범위</th><th>기한</th><th>상태</th><th>메모</th><th class="numeric">관리</th></tr></thead><tbody>' + (rows || '<tr><td colspan="8">' + emptyState('숙제가 없습니다', '학생별 숙제를 추가하세요.') + '</td></tr>') + '</tbody></table></div></section></div>';
+    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>숙제</h2><p>' + filteredHomework().length + '건</p></div><button class="primary-button" id="openTodayHomeworkEvaluations">오늘 숙제 학생 AI 평가</button></div><section class="panel"><div class="panel-body"><div class="filter-row"><select class="select" id="homeworkTeacherFilter">' + teacherOptions(ui.homeworkTeacherId, true, true) + '</select><button class="secondary-button" id="toggleHomeworkFilters">필터</button></div>' + advanced + '</div></section><section class="panel"><div class="panel-body"><form class="homework-form" id="homeworkForm"><label class="stacked-field"><span>학생</span><select class="select" id="homeworkFormStudent" name="studentId" required>' + studentOptions(ui.homeworkFormStudentId, false, ui.homeworkTeacherId) + '</select></label><label class="stacked-field"><span>책</span><select class="select" id="homeworkFormBook" name="bookId" required' + disabled + '>' + homeworkBookOptions(ui.homeworkFormStudentId, ui.homeworkFormBookId, false) + '</select></label><label class="stacked-field"><span>시작 단원</span><select class="select" id="homeworkFormStartUnit" name="startUnit"' + disabled + '>' + homeworkUnitOptions(selection.book, ui.homeworkFormStartUnit) + '</select></label><label class="stacked-field"><span>끝 단원</span><select class="select" id="homeworkFormEndUnit" name="endUnit"' + disabled + '>' + homeworkUnitOptions(selection.book, ui.homeworkFormEndUnit) + '</select></label><label class="stacked-field"><span>기한</span><input class="field" name="dueDate" type="date" value="' + todayString() + '"></label><label class="stacked-field"><span>상태</span><select class="select" name="status">' + homeworkStatusOptions('todo') + '</select></label><label class="stacked-field homework-memo"><span>메모</span><input class="field" name="memo" placeholder="메모"></label><button class="primary-button homework-add" type="submit"' + disabled + '>추가</button></form></div><div class="table-wrap"><table class="homework-table"><thead><tr><th>선생님</th><th>학생</th><th>책</th><th>숙제 범위</th><th>기한</th><th>상태</th><th>메모</th><th class="numeric">관리</th></tr></thead><tbody>' + (rows || '<tr><td colspan="8">' + emptyState('숙제가 없습니다', '학생별 숙제를 추가하세요.') + '</td></tr>') + '</tbody></table></div></section></div>';
   }
 
   function renderConsultSchedule() {
@@ -2111,15 +2163,23 @@
     }).join('');
     var batchPanel = '';
     if (ui.aiTeacherId && ui.aiTeacherId !== 'all' && ui.aiTeacherId !== 'unassigned' && getTeacher(ui.aiTeacherId)) {
-      var batchPlan = ensureTodayEvaluationQueue(ui.aiTeacherId);
-      var batchRows = batchPlan.studentIds.map(function (studentId) {
-        var batchStudent = getStudent(studentId);
+      var homeworkGroups = todayHomeworkGroups(ui.aiTeacherId);
+      var batchEntries = ui.aiBatchSource === 'homework' ? homeworkGroups : ensureTodayEvaluationQueue(ui.aiTeacherId).studentIds.map(function (studentId) {
+        return { student: getStudent(studentId), items: [] };
+      });
+      var batchRows = batchEntries.map(function (entry) {
+        var batchStudent = entry.student;
         if (!batchStudent) return '';
-        var batchDone = hasEvaluationToday(studentId, ui.aiTeacherId);
-        var suggestions = automaticAiKeywords(batchStudent).join(', ');
-        return '<div class="batch-evaluation-row" data-batch-row><input type="checkbox" data-batch-student="' + batchStudent.id + '" ' + (batchDone ? 'disabled' : 'checked') + ' aria-label="' + escapeHtml(batchStudent.name + ' 일괄 작성 선택') + '"><strong>' + escapeHtml(batchStudent.name) + '</strong><input class="field" data-batch-keywords value="' + escapeHtml(suggestions) + '" placeholder="평가 키워드"><span class="status-badge ' + (batchDone ? 'done' : 'todo') + '">' + (batchDone ? '작성됨' : '대기') + '</span></div>';
+        var batchDone = hasEvaluationToday(batchStudent.id, ui.aiTeacherId);
+        var automatic = automaticAiKeywords(batchStudent);
+        var homeworkText = entry.items.length ? todayHomeworkBatchText(entry.items) : '';
+        var suggestions = (homeworkText ? ['오늘 숙제 안내: ' + homeworkText] : []).concat(automatic).join(', ');
+        var studentCopy = '<div class="batch-student-copy"><strong>' + escapeHtml(batchStudent.name) + '</strong>' + (homeworkText ? '<small>' + escapeHtml(homeworkText) + '</small>' : '') + '</div>';
+        return '<div class="batch-evaluation-row" data-batch-row><input type="checkbox" data-batch-student="' + batchStudent.id + '" ' + (batchDone ? 'disabled' : 'checked') + ' aria-label="' + escapeHtml(batchStudent.name + ' 일괄 작성 선택') + '">' + studentCopy + '<input class="field" data-batch-keywords value="' + escapeHtml(suggestions) + '" placeholder="평가 키워드"><span class="status-badge ' + (batchDone ? 'done' : 'todo') + '">' + (batchDone ? '작성됨' : '대기') + '</span></div>';
       }).join('');
-      batchPanel = '<section class="panel"><div class="panel-head"><h3>오늘 학생 일괄 초안</h3><span class="muted">' + escapeHtml(teacherName(ui.aiTeacherId)) + '</span></div><div class="panel-body"><div class="batch-evaluation-list">' + (batchRows || '<p class="muted">오늘 명단이 없습니다.</p>') + '</div><div class="data-actions batch-actions"><button class="primary-button" id="generateBatchEvaluations" ' + (ui.aiBatchBusy ? 'disabled' : '') + '>선택 학생 일괄 작성</button></div></div></section>';
+      var batchSourceSwitch = '<div class="segmented-control batch-source-switch" role="group" aria-label="일괄 작성 대상"><button type="button" class="segment-button ' + (ui.aiBatchSource === 'queue' ? 'active' : '') + '" data-action="select-ai-batch-source" data-source="queue">오늘 평가 명단</button><button type="button" class="segment-button ' + (ui.aiBatchSource === 'homework' ? 'active' : '') + '" data-action="select-ai-batch-source" data-source="homework">오늘 숙제 등록 학생 (' + homeworkGroups.length + ')</button></div>';
+      var emptyBatchText = ui.aiBatchSource === 'homework' ? '오늘 등록한 숙제가 없습니다.' : '오늘 평가 명단이 없습니다.';
+      batchPanel = '<section class="panel"><div class="panel-head"><h3>학생 일괄 AI 평가</h3><span class="muted">' + escapeHtml(teacherName(ui.aiTeacherId)) + '</span></div><div class="panel-body">' + batchSourceSwitch + '<div class="batch-evaluation-list">' + (batchRows || '<p class="muted batch-empty">' + emptyBatchText + '</p>') + '</div><div class="data-actions batch-actions"><button class="primary-button" id="generateBatchEvaluations" ' + (ui.aiBatchBusy || !batchRows ? 'disabled' : '') + '>선택 학생 일괄 작성</button></div></div></section>';
     }
     var recent = (state.evaluations || []).slice().sort(function (a, b) { return String(b.createdAt || '').localeCompare(String(a.createdAt || '')); });
     var searchQuery = ui.aiSearchQuery.trim().toLowerCase();
@@ -2315,6 +2375,7 @@
     if (target.id === 'loadSheetNow') { if (!confirm('구글 시트의 데이터로 현재 앱 데이터를 바꿀까요?')) return; loadFromGoogleSheet(); }
     if (target.id === 'generateEvaluationBtn') generateEvaluation();
     if (target.id === 'generateBatchEvaluations') generateBatchEvaluations();
+    if (target.id === 'openTodayHomeworkEvaluations') openTodayHomeworkAiBatch();
     if (target.id === 'saveEvaluationBtn') saveEvaluationDraft();
     if (target.id === 'copyEvaluationBtn') copyEvaluationDraft();
     if (target.id === 'buildConsultSchedule') { buildConsultationDraft(); renderConsultSchedule(); }
@@ -2335,6 +2396,7 @@
     if (action === 'delete-consultation') deleteConsultation(target.dataset.consultationId);
     if (action === 'add-ai-keyword') addAiKeyword(target.dataset.keyword);
     if (action === 'select-evaluation-student') { ui.aiTeacherId = target.dataset.teacherId || 'all'; ui.aiStudentId = target.dataset.studentId; ui.aiWritingTeacherId = target.dataset.teacherId || ''; ui.aiKeywords = ''; ui.aiDraft = ''; ui.aiDraftMeta = null; ui.aiDuplicateWarning = ''; setAiStatus('학생을 선택했습니다. 추천 키워드를 확인하세요.'); renderAiEvaluation(); }
+    if (action === 'select-ai-batch-source') { ui.aiBatchSource = target.dataset.source === 'homework' ? 'homework' : 'queue'; setAiStatus(ui.aiBatchSource === 'homework' ? '오늘 등록한 숙제 기준으로 학생을 표시합니다.' : '오늘 평가 명단을 표시합니다.'); renderAiEvaluation(); }
     if (action === 'load-evaluation') loadEvaluationIntoEditor(target.dataset.evaluationId);
     if (target.id === 'clearAiKeywords') clearAiKeywords();
     if (action === 'delete-evaluation') deleteEvaluation(target.dataset.evaluationId);

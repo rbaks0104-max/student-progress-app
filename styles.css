@@ -225,8 +225,13 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
 .evaluation-queue-row strong, .evaluation-queue-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .evaluation-queue-row small { color: var(--muted); font-size: 11px; }
 .batch-evaluation-list { display: grid; }
+.batch-source-switch { width: fit-content; max-width: 100%; margin-bottom: 10px; }
 .batch-evaluation-row { display: grid; grid-template-columns: 24px minmax(90px, .55fr) minmax(180px, 2fr) auto; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
 .batch-evaluation-row:last-child { border-bottom: 0; }
+.batch-student-copy { display: grid; gap: 2px; min-width: 0; }
+.batch-student-copy strong, .batch-student-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.batch-student-copy small { color: var(--muted); font-size: 11px; }
+.batch-empty { padding: 12px 0; }
 .batch-actions { margin-top: 12px; justify-content: flex-end; }
 .comparison-stack { display: grid; gap: 16px; }
 .previous-evaluation { max-height: 300px; overflow: auto; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfe; font-size: 13px; line-height: 1.55; }
@@ -268,7 +273,11 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
   .evaluation-queue-row .status-badge { grid-column: 1; justify-self: start; }
   .evaluation-queue-row .compact-button { grid-column: 2; grid-row: 1 / span 2; }
   .batch-evaluation-row { grid-template-columns: 24px minmax(0, 1fr) auto; }
-  .batch-evaluation-row .field { grid-column: 1 / -1; }
+  .batch-evaluation-row > input[type="checkbox"] { grid-column: 1; grid-row: 1; }
+  .batch-evaluation-row .batch-student-copy { grid-column: 2; grid-row: 1; }
+  .batch-evaluation-row .status-badge { grid-column: 3; grid-row: 1; }
+  .batch-evaluation-row .field { grid-column: 1 / -1; grid-row: 2; }
+  .batch-source-switch { display: grid; grid-template-columns: 1fr; width: 100%; }
   .ai-form-pair { grid-template-columns: 1fr; }
   .evaluation-item summary { align-items: flex-start; }
   .evaluation-actions { justify-content: flex-start; }
