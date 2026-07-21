@@ -117,11 +117,13 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
 .filters { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(150px, 1fr) 120px minmax(180px, 1fr); gap: 8px; }
 .progress-controls { display: grid; gap: 12px; border-bottom: 1px solid var(--line); }
 .progress-primary-filters { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(180px, 1.2fr) minmax(180px, 1.2fr); gap: 8px; align-items: end; }
-.progress-list-tools { display: grid; grid-template-columns: auto minmax(200px, 1fr); gap: 10px; align-items: center; }
+.progress-list-tools { display: grid; grid-template-columns: minmax(260px, auto) minmax(200px, 1fr); gap: 10px; align-items: center; }
+.progress-view-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .segmented-control { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-soft); }
 .segment-button { min-height: 36px; padding: 7px 12px; border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--muted); font-weight: 800; }
 .segment-button:last-child { border-right: 0; }
 .segment-button.active { background: var(--blue); color: #fff; }
+.completed-progress-button.active { border-color: #86efac; background: var(--green-soft); color: #166534; }
 .progress-bulk { padding-top: 10px; border-top: 1px solid var(--line-soft); }
 .progress-bulk summary { cursor: pointer; color: var(--text); font-size: 13px; font-weight: 800; }
 .progress-bulk-controls { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) auto auto; gap: 8px; align-items: end; padding-top: 10px; }
@@ -139,6 +141,9 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
 .progress-unit-copy small { color: var(--muted); font-size: 12px; }
 .progress-check-detail { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 10px; padding: 0 12px 12px 98px; }
 .progress-search-empty { margin: 12px; }
+.progress-list-footer { display: grid; place-items: center; padding: 12px; border-top: 1px solid var(--line-soft); background: #fbfcfe; }
+.progress-list-footer .secondary-button { min-width: 180px; }
+.progress-list-footer span { color: var(--muted); font-size: 12px; }
 .status-badge { display: inline-flex; align-items: center; min-height: 26px; padding: 4px 8px; border-radius: 999px; font-size: 12px; font-weight: 800; }
 .status-badge.done { background: var(--green-soft); color: #166534; }
 .status-badge.todo { background: var(--orange-soft); color: #9a3412; }
@@ -187,7 +192,9 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
 @media (max-width: 700px) {
   .progress-controls { padding: 12px; }
   .progress-list-tools { grid-template-columns: 1fr; }
+  .progress-view-actions { display: grid; grid-template-columns: 1fr; }
   .segmented-control { width: 100%; }
+  .completed-progress-button { width: 100%; }
   .progress-bulk-controls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .progress-bulk-controls .primary-button, .progress-bulk-controls .secondary-button { width: 100%; }
   .progress-check-summary { grid-template-columns: minmax(0, 1fr) 32px; gap: 8px; padding: 8px 10px; }
