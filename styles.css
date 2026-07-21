@@ -115,7 +115,8 @@ td.numeric, th.numeric { text-align: right; }
 .check-card span span { color: var(--muted); font-size: 12px; }
 input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
 .filters { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(150px, 1fr) 120px minmax(180px, 1fr); gap: 8px; }
-.progress-filters { grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(130px, .8fr) minmax(200px, 1.4fr); }
+.progress-primary-filters { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(180px, 1.2fr) minmax(180px, 1.2fr) auto; gap: 8px; align-items: end; }
+.progress-filters { grid-template-columns: minmax(150px, .7fr) minmax(220px, 1.3fr); }
 .status-badge { display: inline-flex; align-items: center; min-height: 26px; padding: 4px 8px; border-radius: 999px; font-size: 12px; font-weight: 800; }
 .status-badge.done { background: var(--green-soft); color: #166534; }
 .status-badge.todo { background: var(--orange-soft); color: #9a3412; }
@@ -153,7 +154,7 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
 .evaluation-content { margin: 0; line-height: 1.55; white-space: normal; }
 .stacked-field { display: grid; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 700; }
 @media (max-width: 1000px) {
-  .summary-grid, .two-column, .assignment-layout, .filters, .ai-layout, .detail-grid, .filter-row, .consult-generator { grid-template-columns: 1fr; }
+  .summary-grid, .two-column, .assignment-layout, .filters, .ai-layout, .detail-grid, .filter-row, .progress-primary-filters, .consult-generator { grid-template-columns: 1fr; }
   .form-grid, .form-grid.students, .form-grid.student-form, .form-grid.teachers, .form-grid.books, .homework-form { grid-template-columns: 1fr; }
   .view { padding: 18px 16px 28px; }
   .topbar, .tabs { padding-left: 16px; padding-right: 16px; }
