@@ -115,6 +115,7 @@ td.numeric, th.numeric { text-align: right; }
 .check-card span span { color: var(--muted); font-size: 12px; }
 input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
 .filters { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(150px, 1fr) 120px minmax(180px, 1fr); gap: 8px; }
+.progress-filters { grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(130px, .8fr) minmax(200px, 1.4fr); }
 .status-badge { display: inline-flex; align-items: center; min-height: 26px; padding: 4px 8px; border-radius: 999px; font-size: 12px; font-weight: 800; }
 .status-badge.done { background: var(--green-soft); color: #166534; }
 .status-badge.todo { background: var(--orange-soft); color: #9a3412; }

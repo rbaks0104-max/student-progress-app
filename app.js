@@ -1353,23 +1353,28 @@
   function filteredProgressRows() {
     var query = ui.progressQuery.trim().toLowerCase();
     return progressRows().filter(function (row) {
-      if (!teacherMatches(row.student, ui.progressTeacherId)) return false;
       if (ui.progressStudentId !== 'all' && row.student.id !== ui.progressStudentId) return false;
+      if (!teacherMatches(row.student, ui.progressTeacherId)) return false;
       if (ui.progressBookId !== 'all' && row.book.id !== ui.progressBookId) return false;
       if (ui.progressStatus === 'done' && !row.done) return false;
       if (ui.progressStatus === 'todo' && row.done) return false;
       if (!query) return true;
       return (teacherNamesForStudent(row.student) + ' ' + row.student.name + ' ' + row.book.name + ' ' + row.unitName + ' ' + row.memo).toLowerCase().includes(query);
+    }).sort(function (a, b) {
+      return a.student.name.localeCompare(b.student.name) || a.book.name.localeCompare(b.book.name) || a.unit - b.unit;
     });
   }
 
   function renderProgress() {
     var filtered = filteredProgressRows();
+    var selectedStudent = ui.progressStudentId === 'all' ? null : getStudent(ui.progressStudentId);
+    var selectedTotals = selectedStudent ? studentTotals(selectedStudent.id) : null;
+    var scopeText = selectedStudent ? selectedStudent.name + ' 학생 · ' + selectedTotals.done + '/' + selectedTotals.total + '단원 완료 · ' + percent(selectedTotals.done, selectedTotals.total) + '%' : '전체 학생 · ' + filtered.length + '개 단원';
     var rows = filtered.map(function (row) {
-      return '<tr data-assignment-id="' + row.assignment.id + '" data-unit="' + row.unit + '"><td>' + escapeHtml(teacherNamesForStudent(row.student)) + '</td><td>' + escapeHtml(row.student.name) + '</td><td>' + escapeHtml(row.book.name) + '</td><td class="numeric">' + row.unit + '</td><td>' + escapeHtml(row.unitName) + '</td><td><input type="checkbox" data-action="toggle-progress" ' + (row.done ? 'checked' : '') + '></td><td><input class="field" type="date" data-action="update-progress-date" value="' + escapeHtml(row.date) + '"></td><td><input class="field" data-action="update-progress-memo" value="' + escapeHtml(row.memo) + '"></td><td><span class="status-badge ' + (row.done ? 'done' : 'todo') + '">' + (row.done ? '완료' : '미완료') + '</span></td></tr>';
+      return '<tr data-assignment-id="' + row.assignment.id + '" data-unit="' + row.unit + '"><td>' + escapeHtml(row.student.name) + '</td><td>' + escapeHtml(row.book.name) + '</td><td class="numeric">' + row.unit + '</td><td>' + escapeHtml(row.unitName) + '</td><td><input type="checkbox" data-action="toggle-progress" ' + (row.done ? 'checked' : '') + '></td><td><input class="field" type="date" data-action="update-progress-date" value="' + escapeHtml(row.date) + '"></td><td><input class="field" data-action="update-progress-memo" value="' + escapeHtml(row.memo) + '"></td><td>' + escapeHtml(teacherNamesForStudent(row.student)) + '</td><td><span class="status-badge ' + (row.done ? 'done' : 'todo') + '">' + (row.done ? '완료' : '미완료') + '</span></td></tr>';
     }).join('');
-    var advanced = ui.showProgressFilters ? '<div class="filters advanced-filters"><select class="select" id="progressStudentFilter">' + studentOptions(ui.progressStudentId, true, ui.progressTeacherId) + '</select><select class="select" id="progressBookFilter">' + bookOptions(ui.progressBookId, true) + '</select><select class="select" id="progressStatusFilter"><option value="all" ' + (ui.progressStatus === 'all' ? 'selected' : '') + '>전체</option><option value="todo" ' + (ui.progressStatus === 'todo' ? 'selected' : '') + '>미완료</option><option value="done" ' + (ui.progressStatus === 'done' ? 'selected' : '') + '>완료</option></select><input class="field" id="progressQuery" value="' + escapeHtml(ui.progressQuery) + '" placeholder="검색"></div>' : '';
-    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>진도 체크</h2><p>' + filtered.length + '개 단원</p></div></div><section class="panel"><div class="panel-body"><div class="filter-row"><select class="select" id="progressTeacherFilter">' + teacherOptions(ui.progressTeacherId, true, true) + '</select><button class="secondary-button" id="toggleProgressFilters">필터</button></div>' + advanced + '</div><div class="table-wrap"><table><thead><tr><th>선생님</th><th>학생</th><th>책</th><th class="numeric">단원</th><th>단원명</th><th>완료</th><th>체크일</th><th>메모</th><th>상태</th></tr></thead><tbody>' + (rows || '<tr><td colspan="9">' + emptyState('표시할 단원이 없습니다', '책 배정 화면에서 사용하는 책을 체크하세요.') + '</td></tr>') + '</tbody></table></div></section></div>';
+    var advanced = ui.showProgressFilters ? '<div class="filters advanced-filters progress-filters"><select class="select" id="progressTeacherFilter">' + teacherOptions(ui.progressTeacherId, true, true) + '</select><select class="select" id="progressBookFilter">' + bookOptions(ui.progressBookId, true) + '</select><select class="select" id="progressStatusFilter"><option value="all" ' + (ui.progressStatus === 'all' ? 'selected' : '') + '>전체 상태</option><option value="todo" ' + (ui.progressStatus === 'todo' ? 'selected' : '') + '>미완료</option><option value="done" ' + (ui.progressStatus === 'done' ? 'selected' : '') + '>완료</option></select><input class="field" id="progressQuery" value="' + escapeHtml(ui.progressQuery) + '" placeholder="책·단원·메모 검색"></div>' : '';
+    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>진도 체크</h2><p>' + escapeHtml(scopeText) + '</p></div></div><section class="panel"><div class="panel-body"><div class="filter-row"><select class="select" id="progressStudentFilter">' + studentOptions(ui.progressStudentId, true, 'all') + '</select><button class="secondary-button" id="toggleProgressFilters">필터</button></div>' + advanced + '</div><div class="table-wrap"><table><thead><tr><th>학생</th><th>책</th><th class="numeric">단원</th><th>단원명</th><th>완료</th><th>체크일</th><th>메모</th><th>담당 선생님</th><th>상태</th></tr></thead><tbody>' + (rows || '<tr><td colspan="9">' + emptyState('표시할 단원이 없습니다', '선택한 학생에게 사용할 책을 배정하세요.') + '</td></tr>') + '</tbody></table></div></section></div>';
   }
 
   function renderQuick() {
@@ -1560,7 +1565,7 @@
     if (target.id === 'consultTeacherFilter') { ui.consultTeacherId = target.value; ui.consultDraft = []; ui.consultConflicts = []; render(); }
     if (target.id === 'consultWeeks') { ui.consultWeeks = Number(target.value || 4); render(); }
     if (target.id === 'progressTeacherFilter') { ui.progressTeacherId = target.value; ui.progressStudentId = 'all'; render(); }
-    if (target.id === 'progressStudentFilter') { ui.progressStudentId = target.value; render(); }
+    if (target.id === 'progressStudentFilter') { ui.progressStudentId = target.value; ui.progressTeacherId = 'all'; render(); }
     if (target.id === 'progressBookFilter') { ui.progressBookId = target.value; render(); }
     if (target.id === 'progressStatusFilter') { ui.progressStatus = target.value; render(); }
     if (target.id === 'quickTeacherFilter') { ui.quickTeacherId = target.value; render(); }
