@@ -807,7 +807,8 @@
       if (!student) return;
       var teacherIds = normalizeTeacherIdList(item.teacherIds || item.teacherId);
       if (!teacherIds.length) teacherIds = studentTeacherIds(student);
-      if (teacherId && teacherId !== 'all' && teacherIds.indexOf(teacherId) === -1) return;
+      if (teacherId === 'unassigned' && teacherIds.length) return;
+      if (teacherId && teacherId !== 'all' && teacherId !== 'unassigned' && teacherIds.indexOf(teacherId) === -1) return;
       if (!groups[student.id]) groups[student.id] = { student: student, items: [] };
       groups[student.id].items.push(item);
     });
@@ -1769,15 +1770,52 @@
     var visibleStudents = studentsByTeacher(ui.dashboardTeacherId);
     var totals = overallTotals(ui.dashboardTeacherId);
     var rate = percent(totals.done, totals.total);
+    var todayHomework = todayHomeworkGroups(ui.dashboardTeacherId);
+    var todayHomeworkRows = todayHomework.slice(0, 6).map(function (group) {
+      return '<button type="button" class="dashboard-focus-row" data-action="open-dashboard-homework" data-student-id="' + group.student.id + '"><span><strong>' + escapeHtml(group.student.name) + '</strong><small>' + escapeHtml(todayHomeworkBatchText(group.items)) + '</small></span><span class="status-badge partial">' + group.items.length + '건</span></button>';
+    }).join('');
+    if (todayHomework.length > 6) todayHomeworkRows += '<p class="dashboard-more">외 ' + (todayHomework.length - 6) + '명은 숙제 화면에서 확인할 수 있습니다.</p>';
+    var attentionStudents = visibleStudents.map(function (student) {
+      if (!studentAssignments(student.id).length) return null;
+      var latest = latestProgressDate(student.id);
+      var gap = latest ? daysBetween(latest, todayString()) : null;
+      if (latest && gap != null && gap < 7) return null;
+      return { student: student, latest: latest, gap: gap == null ? Infinity : gap };
+    }).filter(Boolean).sort(function (a, b) {
+      return b.gap - a.gap || String(a.student.name || '').localeCompare(String(b.student.name || ''));
+    });
+    var attentionRows = attentionStudents.slice(0, 6).map(function (item) {
+      var label = item.latest ? item.gap + '일 전 체크' : '체크 기록 없음';
+      return '<button type="button" class="dashboard-focus-row" data-action="open-dashboard-progress" data-student-id="' + item.student.id + '"><span><strong>' + escapeHtml(item.student.name) + '</strong><small>' + escapeHtml(item.latest ? '마지막 체크 ' + item.latest : '배정된 책의 첫 진도를 확인하세요.') + '</small></span><span class="status-badge todo">' + escapeHtml(label) + '</span></button>';
+    }).join('');
+    if (attentionStudents.length > 6) attentionRows += '<p class="dashboard-more">외 ' + (attentionStudents.length - 6) + '명은 알림 화면에서 확인할 수 있습니다.</p>';
+    var visibleStudentIds = {};
+    visibleStudents.forEach(function (student) { visibleStudentIds[student.id] = true; });
+    var recentProgress = [];
+    activeAssignmentsByTeacher(ui.dashboardTeacherId).forEach(function (assignment) {
+      var student = getStudent(assignment.studentId);
+      var book = getBook(assignment.bookId);
+      if (!student || !book || !visibleStudentIds[student.id]) return;
+      for (var unit = 1; unit <= book.unitCount; unit += 1) {
+        var record = getRecord(assignment.id, unit);
+        if (record.done && record.date) recentProgress.push({ student: student, book: book, unit: unit, record: record });
+      }
+    });
+    recentProgress.sort(function (a, b) {
+      return String(b.record.date).localeCompare(String(a.record.date)) || String(a.student.name || '').localeCompare(String(b.student.name || '')) || b.unit - a.unit;
+    });
+    var recentProgressRows = recentProgress.slice(0, 5).map(function (item) {
+      return '<button type="button" class="dashboard-recent-row" data-action="open-dashboard-progress" data-student-id="' + item.student.id + '" data-book-id="' + item.book.id + '"><span class="dashboard-recent-date">' + escapeHtml(item.record.date) + '</span><span><strong>' + escapeHtml(item.student.name) + '</strong><small>' + escapeHtml(item.book.name + ' · ' + homeworkUnitLabel(item.book, item.unit) + (item.record.memo ? ' · ' + item.record.memo : '')) + '</small></span><span class="status-badge done">완료</span></button>';
+    }).join('');
     var studentRows = visibleStudents.map(function (student) {
       var item = studentTotals(student.id); var rateValue = percent(item.done, item.total);
-      return '<tr><td>' + escapeHtml(teacherNamesForStudent(student)) + '</td><td>' + escapeHtml(student.name) + '</td><td class="numeric">' + item.books + '</td><td class="numeric">' + item.total + '</td><td class="numeric">' + item.done + '</td><td class="numeric">' + (item.total - item.done) + '</td><td>' + renderProgressBar(rateValue) + '</td><td class="numeric">' + rateValue + '%</td></tr>';
+      return '<tr><td>' + escapeHtml(student.name) + '</td><td class="numeric">' + item.books + '</td><td class="numeric">' + item.total + '</td><td class="numeric">' + item.done + '</td><td class="numeric">' + (item.total - item.done) + '</td><td>' + renderProgressBar(rateValue) + '</td><td class="numeric">' + rateValue + '%</td></tr>';
     }).join('');
-    var bookRows = state.books.filter(function (book) { return book.unitCount > 0; }).map(function (book) {
-      var item = bookTotals(book.id, ui.dashboardTeacherId); var rateValue = percent(item.done, item.total);
-      return '<tr><td>' + escapeHtml(book.name) + '</td><td class="numeric">' + item.students + '</td><td class="numeric">' + item.total + '</td><td class="numeric">' + item.done + '</td><td class="numeric">' + (item.total - item.done) + '</td><td>' + renderProgressBar(rateValue) + '</td><td class="numeric">' + rateValue + '%</td></tr>';
-    }).join('');
-    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>요약</h2><p>' + (ui.dashboardTeacherId === 'all' ? '전체 선생님' : teacherName(ui.dashboardTeacherId)) + ' 기준</p></div><div class="toolbar"><select class="select" id="dashboardTeacherFilter">' + teacherOptions(ui.dashboardTeacherId, true, true) + '</select></div></div><div class="summary-grid"><div class="summary-card teal"><div class="label">학생 수</div><div class="value">' + visibleStudents.length + '</div></div><div class="summary-card blue"><div class="label">선생님 수</div><div class="value">' + state.teachers.length + '</div></div><div class="summary-card orange"><div class="label">학생별 책 배정</div><div class="value">' + totals.assignments + '</div></div><div class="summary-card slate"><div class="label">진도율</div><div class="value">' + rate + '%</div></div></div><div class="two-column"><section class="panel"><div class="panel-head"><h2>학생별 진도</h2></div><div class="table-wrap"><table><thead><tr><th>선생님</th><th>학생</th><th class="numeric">책</th><th class="numeric">전체</th><th class="numeric">완료</th><th class="numeric">남음</th><th>진도</th><th class="numeric">%</th></tr></thead><tbody>' + (studentRows || '<tr><td colspan="8">' + emptyState('표시할 학생이 없습니다', '학생 화면에서 담당 선생님을 지정하세요.') + '</td></tr>') + '</tbody></table></div></section><section class="panel"><div class="panel-head"><h2>책별 진도</h2></div><div class="table-wrap"><table><thead><tr><th>책</th><th class="numeric">학생</th><th class="numeric">전체</th><th class="numeric">완료</th><th class="numeric">남음</th><th>진도</th><th class="numeric">%</th></tr></thead><tbody>' + (bookRows || '<tr><td colspan="7">' + emptyState('책이 없습니다', '책 화면에서 추가하세요.') + '</td></tr>') + '</tbody></table></div></section></div></div>';
+    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>요약</h2><p>' + (ui.dashboardTeacherId === 'all' ? '전체 선생님' : teacherName(ui.dashboardTeacherId)) + ' 기준</p></div><div class="toolbar"><select class="select" id="dashboardTeacherFilter">' + teacherOptions(ui.dashboardTeacherId, true, true) + '</select></div></div>' +
+      '<div class="dashboard-focus-grid"><section class="panel"><div class="panel-head"><h2>오늘 숙제 등록 학생</h2><span class="muted">' + todayHomework.length + '명</span></div><div class="panel-body dashboard-focus-list">' + (todayHomeworkRows || emptyState('오늘 등록한 숙제가 없습니다', '숙제를 등록하면 여기에 학생이 표시됩니다.')) + '</div></section><section class="panel"><div class="panel-head"><h2>진도 확인 필요 학생</h2><span class="muted">' + attentionStudents.length + '명</span></div><div class="panel-body dashboard-focus-list">' + (attentionRows || emptyState('확인이 필요한 학생이 없습니다', '최근 7일 이내에 진도가 확인되었습니다.')) + '</div></section></div>' +
+      '<section class="panel"><div class="panel-head"><h2>최근 진도 체크</h2><span class="muted">최근 5건</span></div><div class="panel-body dashboard-recent-list">' + (recentProgressRows || emptyState('최근 진도 체크가 없습니다', '진도 체크 화면에서 완료 단원을 기록하세요.')) + '</div></section>' +
+      '<section class="panel"><div class="panel-head"><h2>학생별 진도</h2></div><div class="table-wrap"><table><thead><tr><th>학생</th><th class="numeric">책</th><th class="numeric">전체</th><th class="numeric">완료</th><th class="numeric">남음</th><th>진도</th><th class="numeric">%</th></tr></thead><tbody>' + (studentRows || '<tr><td colspan="7">' + emptyState('표시할 학생이 없습니다', '학생 화면에서 담당 선생님을 지정하세요.') + '</td></tr>') + '</tbody></table></div></section>' +
+      '<section class="dashboard-stats"><div class="panel-head dashboard-stats-head"><h2>전체 현황</h2><span class="muted">스크롤해 확인하는 기본 통계</span></div><div class="summary-grid"><div class="summary-card teal"><div class="label">학생 수</div><div class="value">' + visibleStudents.length + '</div></div><div class="summary-card blue"><div class="label">선생님 수</div><div class="value">' + state.teachers.length + '</div></div><div class="summary-card orange"><div class="label">학생별 책 배정</div><div class="value">' + totals.assignments + '</div></div><div class="summary-card slate"><div class="label">진도율</div><div class="value">' + rate + '%</div></div></div></section></div>';
   }
 
   function renderStudents() {
@@ -2369,6 +2407,8 @@
     if (action === 'close-book-units') { ui.editingBookId = null; renderBooks(); }
     if (action === 'select-assignment-student') { ui.selectedStudentId = target.dataset.studentId; render(); }
     if (action === 'open-detail-student') { ui.detailStudentId = target.dataset.studentId; var studentForDetail = getStudent(ui.detailStudentId); ui.detailTeacherId = firstTeacherIdForStudent(studentForDetail) || 'all'; ui.activeTab = 'detail'; render(); }
+    if (action === 'open-dashboard-homework') { ui.homeworkTeacherId = ui.dashboardTeacherId; ui.homeworkStudentId = target.dataset.studentId; ui.homeworkBookId = 'all'; ui.homeworkStatus = 'all'; ui.showHomeworkFilters = true; ui.homeworkFormStudentId = target.dataset.studentId; ui.homeworkFormBookId = null; ui.activeTab = 'homework'; render(); }
+    if (action === 'open-dashboard-progress') { ui.progressStudentId = target.dataset.studentId; ui.progressBookId = target.dataset.bookId || null; ui.progressUnit = 'all'; ui.progressView = 'check'; ui.progressStatus = 'todo'; ui.progressQuery = ''; ui.progressVisibleLimit = 5; ui.progressRangeStart = 1; ui.progressRangeEnd = 1; ui.progressLastBulk = null; ui.expandedProgressKey = null; ui.activeTab = 'progress'; render(); }
     if (target.id === 'dataExportJson') exportJson();
     if (target.id === 'dataExportCsv') { var stamp = new Date().toISOString().slice(0, 10); downloadText('progress-' + stamp + '.csv', progressCsv(), 'text/csv;charset=utf-8'); }
     if (target.id === 'saveSheetNow') saveToGoogleSheet(false);

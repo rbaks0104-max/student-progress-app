@@ -47,6 +47,20 @@ h3 { margin: 0; font-size: 15px; }
 .summary-card.blue { border-top: 4px solid var(--blue); }
 .summary-card.orange { border-top: 4px solid var(--orange); }
 .summary-card.slate { border-top: 4px solid #475569; }
+.dashboard-focus-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.dashboard-focus-list, .dashboard-recent-list { display: grid; gap: 0; }
+.dashboard-focus-row, .dashboard-recent-row { width: 100%; min-width: 0; padding: 11px 0; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--text); text-align: left; align-items: center; gap: 10px; }
+.dashboard-focus-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+.dashboard-recent-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto; }
+.dashboard-focus-row:last-child, .dashboard-recent-row:last-child { border-bottom: 0; }
+.dashboard-focus-row:hover, .dashboard-recent-row:hover { background: var(--surface-soft); }
+.dashboard-focus-row > span:first-child, .dashboard-recent-row > span:nth-child(2) { display: grid; gap: 3px; min-width: 0; }
+.dashboard-focus-row strong, .dashboard-recent-row strong, .dashboard-focus-row small, .dashboard-recent-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-focus-row small, .dashboard-recent-row small { color: var(--muted); font-size: 12px; }
+.dashboard-recent-date { color: var(--muted); font-size: 12px; font-weight: 800; }
+.dashboard-more { margin: 10px 0 0; color: var(--muted); font-size: 12px; }
+.dashboard-stats { display: grid; gap: 10px; padding-top: 4px; }
+.dashboard-stats-head { min-height: 0; padding: 0; border: 0; background: transparent; }
 .two-column { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 12px 14px; border-bottom: 1px solid var(--line); background: var(--surface-soft); }
@@ -191,6 +205,7 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
 .status-badge { display: inline-flex; align-items: center; min-height: 26px; padding: 4px 8px; border-radius: 999px; font-size: 12px; font-weight: 800; }
 .status-badge.done { background: var(--green-soft); color: #166534; }
 .status-badge.todo { background: var(--orange-soft); color: #9a3412; }
+.status-badge.partial { background: var(--blue-soft); color: var(--blue-strong); }
 .quick-table { min-width: 980px; }
 .quick-table th, .quick-table td { text-align: center; padding: 7px; }
 .quick-table th:first-child, .quick-table td:first-child, .quick-table th:nth-child(2), .quick-table td:nth-child(2) { text-align: left; }
@@ -261,7 +276,7 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
 .empty-state.compact { padding: 16px; font-size: 12px; }
 .stacked-field { display: grid; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 700; }
 @media (max-width: 1000px) {
-  .summary-grid, .two-column, .assignment-layout, .filters, .ai-layout, .detail-grid, .filter-row, .progress-primary-filters, .consult-generator, .evaluation-search { grid-template-columns: 1fr; }
+  .summary-grid, .dashboard-focus-grid, .two-column, .assignment-layout, .filters, .ai-layout, .detail-grid, .filter-row, .progress-primary-filters, .consult-generator, .evaluation-search { grid-template-columns: 1fr; }
   .form-grid, .form-grid.students, .form-grid.student-form, .form-grid.teachers, .form-grid.books, .homework-form { grid-template-columns: 1fr; }
   .progress-list-tools, .progress-bulk-controls, .progress-check-detail { grid-template-columns: 1fr; }
   .progress-summary-track, .progress-summary-columns { grid-template-columns: 1fr; }
@@ -276,6 +291,9 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
 @media (max-width: 700px) {
   .section-head { align-items: stretch; flex-direction: column; }
   .section-head > button { width: 100%; }
+  .dashboard-recent-row { grid-template-columns: 72px minmax(0, 1fr) auto; }
+  .dashboard-focus-row .status-badge { max-width: 112px; white-space: normal; text-align: center; }
+  .dashboard-stats-head { align-items: flex-start; }
   .ai-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ai-summary-grid .summary-card { min-height: 82px; }
   .ai-summary-grid .value { font-size: 18px; }
