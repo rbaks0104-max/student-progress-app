@@ -83,9 +83,13 @@ h3 { margin: 0; font-size: 15px; }
 .homework-table th:nth-child(6) { width: 11%; }
 .homework-table th:nth-child(7) { width: 11%; }
 .homework-table th:nth-child(8) { width: 5%; }
-.homework-range-controls { display: grid; grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr); width: 100%; min-width: 0; align-items: center; gap: 6px; }
-.homework-range-controls .select { min-width: 0; max-width: 100%; }
+.homework-table td:nth-child(3),
+.homework-table td:nth-child(4),
+.homework-table td:nth-child(5) { overflow: hidden; }
+.homework-range-controls { display: flex; width: 100%; min-width: 0; max-width: 100%; align-items: center; gap: 6px; overflow: hidden; }
+.homework-range-controls .select { flex: 1 1 0; width: 0; min-width: 0; max-width: none; text-overflow: ellipsis; }
 .homework-range-controls > span { color: var(--muted); text-align: center; font-weight: 800; }
+.homework-table td:nth-child(5) .field { min-width: 0; max-width: 100%; }
 .teacher-check-list { display: flex; flex-wrap: wrap; gap: 6px; min-width: 220px; }
 .teacher-check { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 12px; font-weight: 800; }
 .teacher-check:has(input:checked) { border-color: var(--blue); background: var(--blue-soft); color: var(--blue-strong); }
