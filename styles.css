@@ -74,8 +74,17 @@ h3 { margin: 0; font-size: 15px; }
 .form-grid.books { grid-template-columns: minmax(180px, 1.4fr) 110px minmax(180px, 2fr) auto; }
 .homework-form { display: grid; grid-template-columns: minmax(140px, 1.1fr) minmax(150px, 1.2fr) minmax(150px, 1fr) minmax(150px, 1fr) 145px 120px minmax(180px, 1.3fr) auto; gap: 10px; align-items: end; }
 .homework-add { align-self: end; }
-.homework-table { min-width: 1240px; }
-.homework-range-controls { display: grid; grid-template-columns: minmax(150px, 1fr) 18px minmax(150px, 1fr); align-items: center; gap: 6px; }
+.homework-table { min-width: 1450px; }
+.homework-table th:nth-child(1) { width: 9%; }
+.homework-table th:nth-child(2) { width: 9%; }
+.homework-table th:nth-child(3) { width: 16%; }
+.homework-table th:nth-child(4) { width: 25%; }
+.homework-table th:nth-child(5) { width: 14%; }
+.homework-table th:nth-child(6) { width: 11%; }
+.homework-table th:nth-child(7) { width: 11%; }
+.homework-table th:nth-child(8) { width: 5%; }
+.homework-range-controls { display: grid; grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr); width: 100%; min-width: 0; align-items: center; gap: 6px; }
+.homework-range-controls .select { min-width: 0; max-width: 100%; }
 .homework-range-controls > span { color: var(--muted); text-align: center; font-weight: 800; }
 .teacher-check-list { display: flex; flex-wrap: wrap; gap: 6px; min-width: 220px; }
 .teacher-check { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 12px; font-weight: 800; }
