@@ -92,7 +92,14 @@
   var AI_TEACHER_STYLES = [
     { id: 'balanced', label: '기본 균형형', hint: '장점, 보완점, 다음 계획을 자연스럽고 균형 있게 정리' },
     { id: 'detailed-report', label: '상세 보고형', hint: '진도와 확인 사항, 원인 분석, 지도 내용, 다음 계획을 차례로 자세히 정리' },
-    { id: 'issue-action', label: '문제·조치형', hint: '현재 범위와 약점을 짚고 설명한 내용과 다음 과제를 간결하게 정리' }
+    { id: 'issue-action', label: '문제·조치형', hint: '현재 범위와 약점을 짚고 설명한 내용과 다음 과제를 간결하게 정리' },
+    {
+      id: 'song-gyuman',
+      baseId: 'issue-action',
+      label: '송규만 선생님형',
+      hint: '현재 강점과 약점을 직접 짚고 설명한 내용과 구체적인 지시를 이어서 정리',
+      promptHint: '교재와 범위 다음에 관찰된 강점과 약점을 직접 서술하고, 그 원인이나 설명한 개념, 구체적인 지시 또는 당부 순으로 작성합니다. 기본적으로, 특히나, 전반적으로, 아직, 이에 대해서 설명해주었습니다, 그래서 ...하라고 지시하였습니다, 반드시 ... 당부하였습니다 같은 표현을 문맥에 맞게 사용하되 같은 표현을 반복하지 않습니다. 과장된 칭찬보다 실제 문제 풀이 습관과 개념 상태를 분명하게 적습니다.'
+    }
   ];
   var AI_PROVIDERS = {
     local: { label: '무료 기본 초안', model: 'local-template' },
@@ -148,7 +155,12 @@
     data.students.forEach(function (student) { normalizeStudentTeachers(student); delete student.status; });
     data.books.forEach(function (book) { normalizeBookUnits(book); });
     data.students.forEach(function (student) { data.consultationSettings[student.id] = normalizeConsultationSetting(data.consultationSettings[student.id], student); });
-    data.teachers.forEach(function (teacher) { if (teacher.memo == null) teacher.memo = ''; teacher.aiStyle = normalizeAiTeacherStyle(teacher.aiStyle); });
+    data.teachers.forEach(function (teacher) {
+      if (teacher.memo == null) teacher.memo = '';
+      teacher.aiStyle = normalizeAiTeacherStyle(teacher.aiStyle);
+      if (isSongGyumanTeacherName(teacher.name)) teacher.aiStyleProfile = 'song-gyuman';
+      else if (teacher.aiStyleProfile !== 'song-gyuman') teacher.aiStyleProfile = '';
+    });
     data.homework.forEach(function (item) { var ids = normalizeTeacherIdList(item.teacherIds); if (!ids.length && item.teacherId) ids = normalizeTeacherIdList(item.teacherId); if (item.status == null) item.status = 'todo'; if (item.memo == null) item.memo = ''; if (item.createdAt == null) item.createdAt = new Date().toISOString(); if (item.bookId == null) item.bookId = ''; if (item.bookName == null) item.bookName = ''; if (item.bookId) { var homeworkBook = data.books.find(function (book) { return book.id === item.bookId; }); var maxUnit = homeworkBook ? homeworkBook.unitCount : Math.max(Number(item.startUnit || 1), Number(item.endUnit || 1)); item.startUnit = Math.max(1, Math.min(maxUnit || 1, Number(item.startUnit || 1))); item.endUnit = Math.max(item.startUnit, Math.min(maxUnit || item.startUnit, Number(item.endUnit || item.startUnit))); } item.teacherIds = ids; item.teacherId = ids[0] || ''; });
     data.consultations.forEach(function (item) { var ids = normalizeTeacherIdList(item.teacherIds); if (!ids.length && item.teacherId) ids = normalizeTeacherIdList(item.teacherId); if (item.type == null) item.type = '상담 메모'; if (item.date == null) item.date = new Date().toISOString().slice(0, 10); item.teacherIds = ids; item.teacherId = ids[0] || ''; });
     data.consultationSchedule.forEach(function (item) { var student = data.students.find(function (s) { return s.id === item.studentId; }); var ids = normalizeTeacherIdList(item.teacherIds); if (!ids.length && item.teacherId) ids = normalizeTeacherIdList(item.teacherId); if (!ids.length && student) ids = studentTeacherIds(student); item.teacherIds = ids; item.teacherId = ids[0] || ''; if (item.status == null) item.status = 'scheduled'; if (item.duration == null) item.duration = 20; if (item.memo == null) item.memo = ''; if (item.createdAt == null) item.createdAt = new Date().toISOString(); });
@@ -469,6 +481,13 @@
     return AI_TEACHER_STYLES.find(function (style) { return style.id === styleId; }) || AI_TEACHER_STYLES[0];
   }
   function normalizeAiTeacherStyle(styleId) { return aiTeacherStyle(styleId).id; }
+  function isSongGyumanTeacherName(name) {
+    return String(name || '').replace(/\s+/g, '').replace(/선생님$/, '') === '송규만';
+  }
+  function effectiveAiTeacherStyle(teacher) {
+    if (teacher && (teacher.aiStyleProfile === 'song-gyuman' || isSongGyumanTeacherName(teacher.name))) return aiTeacherStyle('song-gyuman');
+    return aiTeacherStyle(teacher && teacher.aiStyle);
+  }
   function aiTeacherStyleOptions(selectedId) {
     return AI_TEACHER_STYLES.map(function (style) {
       return '<option value="' + style.id + '" ' + (normalizeAiTeacherStyle(selectedId) === style.id ? 'selected' : '') + '>' + escapeHtml(style.label) + '</option>';
@@ -1123,7 +1142,7 @@
   function generateLocalEvaluation(student, keywords, tone, length, summary, reason, writingTeacher) {
     var name = student ? student.name : '해당 학생';
     var teacher = writingTeacher ? writingTeacher.name : '미지정';
-    var style = aiTeacherStyle(writingTeacher && writingTeacher.aiStyle);
+    var style = effectiveAiTeacherStyle(writingTeacher);
     var memo = student && student.memo ? ' 참고 메모로는 ' + student.memo + '이 있습니다.' : '';
     var progressText = summary && summary.text ? summary.text : '진도 정보가 아직 충분하지 않습니다.';
     var progressSentence = progressText.replace(/[.!?。]+$/, '');
@@ -1135,11 +1154,14 @@
     if (style.id === 'issue-action') {
       return localEvaluationPrefix(reason) + name + ' 학생\n' + progressText + '\n\n현재 ' + keywords + ' 부분을 확인하였습니다.' + memo + ' 이에 대해서 필요한 내용을 설명해주었고, 다음 수업에서는 같은 유형을 다시 확인하기로 하였습니다.';
     }
+    if (style.id === 'song-gyuman') {
+      return localEvaluationPrefix(reason) + name + ' 학생\n' + progressText + '\n\n기본적으로 ' + keywords + ' 부분을 확인하였습니다.' + memo + ' 아직 보완이 필요한 부분에 대해서 설명해주었습니다. 그래서 다음 수업 전까지 같은 부분을 다시 확인해오라고 지시하였습니다.';
+    }
     return localEvaluationPrefix(reason) + name + ' 학생은 ' + keywords + '의 모습이 관찰됩니다.' + memo + detail + closing;
   }
 
   function buildAiEvaluationInput(student, writingTeacher, keywords, subject) {
-    var style = aiTeacherStyle(writingTeacher && writingTeacher.aiStyle);
+    var style = effectiveAiTeacherStyle(writingTeacher);
     var summary = studentProgressSummary(student.id);
     var homeworkSummary = studentHomeworkSummary(student.id);
     return {
@@ -1148,7 +1170,7 @@
         studentMemo: '',
         teacherName: '담당 선생님',
         assignedTeacherNames: '담당 선생님',
-        teacherStyleId: style.id,
+        teacherStyleId: style.baseId || style.id,
         teacherStyleLabel: style.label,
         template: ui.aiTemplate,
         keywords: keywords,
@@ -1156,7 +1178,7 @@
         length: ui.aiLength,
         subject: subject,
         subjectLabel: aiSubjectLabel(subject),
-        subjectGuide: aiSubjectGuide(subject),
+        subjectGuide: [aiSubjectGuide(subject), style.promptHint ? '선생님별 말투 작성 기준: ' + style.promptHint : ''].filter(Boolean).join('\n'),
         progressSummary: summary.text,
         homeworkSummary: homeworkSummary.text
       },
@@ -1265,7 +1287,7 @@
     var writingTeacher = options.writingTeacher;
     var content = String(options.content || '').trim();
     var homeworkSummary = studentHomeworkSummary(student.id);
-    var style = aiTeacherStyle(writingTeacher && writingTeacher.aiStyle);
+    var style = effectiveAiTeacherStyle(writingTeacher);
     if (content.indexOf('[숙제]') !== 0) content = formatEvaluationDocument(homeworkSummary, content);
     var duplicate = duplicateEvaluationInfo(content, student.id, writingTeacher ? writingTeacher.id : '');
     var item = {
@@ -2025,7 +2047,7 @@
       var studentCount = studentsByTeacher(teacher.id).length;
       var totals = overallTotals(teacher.id);
       var rate = percent(totals.done, totals.total);
-      return '<tr data-teacher-id="' + teacher.id + '"><td><input class="field" data-action="update-teacher" data-field="name" value="' + escapeHtml(teacher.name) + '"></td><td><select class="select" data-action="update-teacher-style">' + aiTeacherStyleOptions(teacher.aiStyle) + '</select></td><td><input class="field" data-action="update-teacher" data-field="memo" value="' + escapeHtml(teacher.memo || '') + '"></td><td class="numeric">' + studentCount + '</td><td class="numeric">' + totals.assignments + '</td><td class="numeric">' + totals.done + '/' + totals.total + '</td><td>' + renderProgressBar(rate) + '</td><td class="numeric">' + rate + '%</td><td><div class="row-actions"><button class="mini-button danger" data-action="delete-teacher" title="삭제" aria-label="삭제">×</button></div></td></tr>';
+      return '<tr data-teacher-id="' + teacher.id + '"><td><input class="field" data-action="update-teacher" data-field="name" value="' + escapeHtml(teacher.name) + '"></td><td><select class="select" data-action="update-teacher-style">' + aiTeacherStyleOptions(effectiveAiTeacherStyle(teacher).id) + '</select></td><td><input class="field" data-action="update-teacher" data-field="memo" value="' + escapeHtml(teacher.memo || '') + '"></td><td class="numeric">' + studentCount + '</td><td class="numeric">' + totals.assignments + '</td><td class="numeric">' + totals.done + '/' + totals.total + '</td><td>' + renderProgressBar(rate) + '</td><td class="numeric">' + rate + '%</td><td><div class="row-actions"><button class="mini-button danger" data-action="delete-teacher" title="삭제" aria-label="삭제">×</button></div></td></tr>';
     }).join('');
     var unassignedTotals = overallTotals('unassigned');
     var unassignedRate = percent(unassignedTotals.done, unassignedTotals.total);
@@ -2506,7 +2528,7 @@
     var student = getStudent(ui.aiStudentId);
     var writingTeacherId = ensureAiWritingTeacherId(student);
     var writingTeacher = getTeacher(writingTeacherId);
-    var writingStyle = aiTeacherStyle(writingTeacher && writingTeacher.aiStyle);
+    var writingStyle = effectiveAiTeacherStyle(writingTeacher);
     var summary = student ? studentProgressSummary(student.id) : { text: '학생을 먼저 추가하세요.', books: [] };
     var homeworkSummary = student ? studentHomeworkSummary(student.id) : { text: '- 학생을 먼저 선택하세요.', items: [] };
     var previous = student ? latestEvaluation(student.id, writingTeacherId) : null;
@@ -2593,7 +2615,7 @@
   }
 
   function addStudent(form) { var data = new FormData(form); var name = String(data.get('name') || '').trim(); if (!name) return; var teacherIds = normalizeTeacherIdList(String(data.get('teacherId') || '').trim()); state.students.push({ id: uid('stu'), name: name, teacherIds: teacherIds, teacherId: teacherIds[0] || '', memo: String(data.get('memo') || '').trim() }); saveState(); render(); }
-  function addTeacher(form) { var data = new FormData(form); var name = String(data.get('name') || '').trim(); if (!name) return; state.teachers.push({ id: uid('teacher'), name: name, aiStyle: normalizeAiTeacherStyle(data.get('aiStyle')), memo: String(data.get('memo') || '').trim() }); saveState(); render(); }
+  function addTeacher(form) { var data = new FormData(form); var name = String(data.get('name') || '').trim(); if (!name) return; var selectedStyle = normalizeAiTeacherStyle(data.get('aiStyle')); var songProfile = isSongGyumanTeacherName(name) || selectedStyle === 'song-gyuman'; state.teachers.push({ id: uid('teacher'), name: name, aiStyle: songProfile ? 'issue-action' : selectedStyle, aiStyleProfile: songProfile ? 'song-gyuman' : '', memo: String(data.get('memo') || '').trim() }); saveState(); render(); }
   function addHomeworkBatch(form) {
     var data = new FormData(form);
     var studentId = String(data.get('studentId') || '').trim();
@@ -2705,8 +2727,8 @@
     var target = event.target; var action = target.dataset.action; var studentRow = target.closest('[data-student-id]'); var teacherRow = target.closest('[data-teacher-id]'); var homeworkRow = target.closest('[data-homework-id]'); var consultRow = target.closest('[data-consult-id]'); var bookRow = target.closest('[data-book-id]'); var progressRow = target.closest('[data-assignment-id][data-unit]');
     if (action === 'update-student' && studentRow) { var student = getStudent(studentRow.dataset.studentId); if (!student) return; if (target.dataset.field === 'teacherId') setStudentTeacherIds(student, target.value ? [target.value.trim()] : []); else student[target.dataset.field] = target.value.trim(); saveState(); render(); }
     if (action === 'toggle-student-teacher' && studentRow) { var assignedStudent = getStudent(studentRow.dataset.studentId); if (!assignedStudent) return; var assignedTeacherIds = studentTeacherIds(assignedStudent); if (target.checked && assignedTeacherIds.indexOf(target.dataset.teacherId) === -1) assignedTeacherIds.push(target.dataset.teacherId); if (!target.checked) assignedTeacherIds = assignedTeacherIds.filter(function (id) { return id !== target.dataset.teacherId; }); setStudentTeacherIds(assignedStudent, assignedTeacherIds); saveState(); render(); }
-    if (action === 'update-teacher' && teacherRow) { var teacher = getTeacher(teacherRow.dataset.teacherId); if (!teacher) return; teacher[target.dataset.field] = target.value.trim(); saveState(); render(); }
-    if (action === 'update-teacher-style' && teacherRow) { var styleTeacher = getTeacher(teacherRow.dataset.teacherId); if (!styleTeacher) return; styleTeacher.aiStyle = normalizeAiTeacherStyle(target.value); saveState(); render(); }
+    if (action === 'update-teacher' && teacherRow) { var teacher = getTeacher(teacherRow.dataset.teacherId); if (!teacher) return; teacher[target.dataset.field] = target.value.trim(); if (target.dataset.field === 'name' && isSongGyumanTeacherName(teacher.name)) { teacher.aiStyle = 'issue-action'; teacher.aiStyleProfile = 'song-gyuman'; } saveState(); render(); }
+    if (action === 'update-teacher-style' && teacherRow) { var styleTeacher = getTeacher(teacherRow.dataset.teacherId); if (!styleTeacher) return; var selectedTeacherStyle = normalizeAiTeacherStyle(target.value); styleTeacher.aiStyleProfile = selectedTeacherStyle === 'song-gyuman' ? 'song-gyuman' : ''; styleTeacher.aiStyle = selectedTeacherStyle === 'song-gyuman' ? 'issue-action' : selectedTeacherStyle; saveState(); render(); }
     if (action === 'update-homework' && homeworkRow) { var homework = state.homework.find(function (item) { return item.id === homeworkRow.dataset.homeworkId; }); if (!homework) return; homework[target.dataset.field] = target.value.trim(); saveState(); render(); }
     if (action === 'update-homework-book' && homeworkRow) { var bookHomework = state.homework.find(function (item) { return item.id === homeworkRow.dataset.homeworkId; }); if (!bookHomework) return; applyHomeworkBookRange(bookHomework, target.value, 1, 1); saveState(); render(); }
     if (action === 'update-homework-start' && homeworkRow) { var startHomework = state.homework.find(function (item) { return item.id === homeworkRow.dataset.homeworkId; }); if (!startHomework) return; applyHomeworkBookRange(startHomework, startHomework.bookId, Number(target.value), startHomework.endUnit); saveState(); render(); }
