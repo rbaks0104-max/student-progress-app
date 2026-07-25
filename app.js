@@ -48,9 +48,16 @@
     homeworkStatus: 'all',
     showHomeworkFilters: false,
     homeworkFormStudentId: null,
+    homeworkStudentQuery: '',
     homeworkFormBookId: null,
     homeworkFormStartUnit: 1,
     homeworkFormEndUnit: 1,
+    homeworkEntryType: 'book',
+    homeworkResourceName: '',
+    homeworkResourceStart: 1,
+    homeworkResourceEnd: 1,
+    homeworkResourceRange: '',
+    homeworkResourceMemo: '',
     homeworkBatchDueDate: '',
     homeworkBatchStatus: 'todo',
     homeworkBatchNotice: '',
@@ -103,7 +110,7 @@
   ];
   var AI_PROVIDERS = {
     local: { label: '무료 기본 초안', model: 'local-template' },
-    gemini: { label: 'Gemini', model: 'gemini-2.5-flash-lite' },
+    gemini: { label: 'Gemini', model: 'gemini-3.5-flash-lite' },
     openai: { label: 'GPT-5 nano', model: 'gpt-5-nano' }
   };
   var AI_SUBJECTS = [
@@ -132,12 +139,12 @@
     for (var i = 1; i <= 35; i += 1) students.push({ id: 'stu-' + i, name: '학생 ' + String(i).padStart(2, '0'), teacherId: '', teacherIds: [], memo: '' });
     var counts = [12, 10, 8, 15, 6];
     var books = counts.map(function (unitCount, index) { return { id: 'book-' + (index + 1), name: '책 ' + String(index + 1).padStart(2, '0'), subject: 'unclassified', unitCount: unitCount, unitNames: Array(unitCount).fill(''), memo: '책 이름과 단원 수를 실제 값으로 바꾸세요' }; });
-    return { version: 12, teachers: [], students: students, books: books, assignments: [], progress: {}, homework: [], consultations: [], consultationSettings: {}, consultationSchedule: [], evaluations: [], evaluationQueue: [], aiUsage: [], aiSettings: { dailyTarget: 5, cycleDays: 7, monthlyBudgetUsd: 5, defaultProvider: 'gemini' } };
+    return { version: 14, teachers: [], students: students, books: books, assignments: [], progress: {}, homework: [], consultations: [], consultationSettings: {}, consultationSchedule: [], evaluations: [], evaluationQueue: [], aiUsage: [], aiSettings: { dailyTarget: 5, cycleDays: 7, monthlyBudgetUsd: 5, defaultProvider: 'gemini' } };
   }
 
   function normalizeState(data) {
     if (!data || !data.students || !data.books || !data.assignments || !data.progress) return seedState();
-    data.version = Math.max(Number(data.version || 1), 12);
+    data.version = Math.max(Number(data.version || 1), 14);
     data.teachers = Array.isArray(data.teachers) ? data.teachers : [];
     data.homework = Array.isArray(data.homework) ? data.homework : [];
     data.consultations = Array.isArray(data.consultations) ? data.consultations : [];
@@ -161,12 +168,36 @@
       if (isSongGyumanTeacherName(teacher.name)) teacher.aiStyleProfile = 'song-gyuman';
       else if (teacher.aiStyleProfile !== 'song-gyuman') teacher.aiStyleProfile = '';
     });
-    data.homework.forEach(function (item) { var ids = normalizeTeacherIdList(item.teacherIds); if (!ids.length && item.teacherId) ids = normalizeTeacherIdList(item.teacherId); if (item.status == null) item.status = 'todo'; if (item.memo == null) item.memo = ''; if (item.createdAt == null) item.createdAt = new Date().toISOString(); if (item.bookId == null) item.bookId = ''; if (item.bookName == null) item.bookName = ''; if (item.bookId) { var homeworkBook = data.books.find(function (book) { return book.id === item.bookId; }); var maxUnit = homeworkBook ? homeworkBook.unitCount : Math.max(Number(item.startUnit || 1), Number(item.endUnit || 1)); item.startUnit = Math.max(1, Math.min(maxUnit || 1, Number(item.startUnit || 1))); item.endUnit = Math.max(item.startUnit, Math.min(maxUnit || item.startUnit, Number(item.endUnit || item.startUnit))); } item.teacherIds = ids; item.teacherId = ids[0] || ''; });
+    data.homework.forEach(function (item) {
+      var ids = normalizeTeacherIdList(item.teacherIds);
+      if (!ids.length && item.teacherId) ids = normalizeTeacherIdList(item.teacherId);
+      if (item.status == null) item.status = 'todo';
+      if (item.memo == null) item.memo = '';
+      if (item.createdAt == null) item.createdAt = new Date().toISOString();
+      if (item.bookId == null) item.bookId = '';
+      if (item.bookName == null) item.bookName = '';
+      item.homeworkType = normalizeHomeworkType(item.homeworkType, item);
+      if (item.bookId) {
+        var homeworkBook = data.books.find(function (book) { return book.id === item.bookId; });
+        var maxUnit = homeworkBook ? homeworkBook.unitCount : Math.max(Number(item.startUnit || 1), Number(item.endUnit || 1));
+        item.startUnit = Math.max(1, Math.min(maxUnit || 1, Number(item.startUnit || 1)));
+        item.endUnit = Math.max(item.startUnit, Math.min(maxUnit || item.startUnit, Number(item.endUnit || item.startUnit)));
+        item.homeworkType = 'book';
+      } else if (item.homeworkType === 'mock') {
+        item.rangeStart = Math.max(1, Number(item.rangeStart || 1));
+        item.rangeEnd = Math.max(item.rangeStart, Number(item.rangeEnd || item.rangeStart));
+        item.title = mockHomeworkRangeLabel(item.rangeStart, item.rangeEnd);
+      } else if (item.title == null) {
+        item.title = '';
+      }
+      item.teacherIds = ids;
+      item.teacherId = ids[0] || '';
+    });
     data.consultations.forEach(function (item) { var ids = normalizeTeacherIdList(item.teacherIds); if (!ids.length && item.teacherId) ids = normalizeTeacherIdList(item.teacherId); if (item.type == null) item.type = '상담 메모'; if (item.date == null) item.date = new Date().toISOString().slice(0, 10); item.teacherIds = ids; item.teacherId = ids[0] || ''; });
     data.consultationSchedule.forEach(function (item) { var student = data.students.find(function (s) { return s.id === item.studentId; }); var ids = normalizeTeacherIdList(item.teacherIds); if (!ids.length && item.teacherId) ids = normalizeTeacherIdList(item.teacherId); if (!ids.length && student) ids = studentTeacherIds(student); item.teacherIds = ids; item.teacherId = ids[0] || ''; if (item.status == null) item.status = 'scheduled'; if (item.duration == null) item.duration = 20; if (item.memo == null) item.memo = ''; if (item.createdAt == null) item.createdAt = new Date().toISOString(); });
     data.evaluations.forEach(function (item) { var ids = normalizeTeacherIdList(item.teacherIds); if (!ids.length && item.teacherId) ids = normalizeTeacherIdList(item.teacherId); item.teacherIds = ids; item.teacherId = ids[0] || ''; item.styleId = normalizeAiTeacherStyle(item.styleId); item.styleLabel = item.styleLabel || aiTeacherStyle(item.styleId).label; item.homeworkSummary = item.homeworkSummary || ''; item.status = normalizeEvaluationStatus(item.status); item.subject = normalizeAiSubject(item.subject || 'auto'); item.provider = normalizeAiProvider(item.provider || 'local'); item.model = item.model || ''; item.estimatedCostUsd = Math.max(0, Number(item.estimatedCostUsd || 0)); });
     data.evaluationQueue = data.evaluationQueue.filter(function (item) { return item && item.date && item.teacherId && Array.isArray(item.studentIds); }).map(function (item) { return { date: String(item.date), teacherId: String(item.teacherId), studentIds: item.studentIds.map(String), createdAt: item.createdAt || new Date().toISOString() }; });
-    data.aiUsage = data.aiUsage.filter(function (item) { return item && item.createdAt; }).map(function (item) { item.provider = normalizeAiProvider(item.provider); item.inputTokens = Math.max(0, Number(item.inputTokens || 0)); item.outputTokens = Math.max(0, Number(item.outputTokens || 0)); item.estimatedCostUsd = Math.max(0, Number(item.estimatedCostUsd || 0)); return item; });
+    data.aiUsage = data.aiUsage.filter(function (item) { return item && item.createdAt; }).map(function (item) { item.provider = normalizeAiProvider(item.provider); item.kind = item.kind === 'book-search' ? 'book-search' : 'evaluation'; item.label = String(item.label || ''); item.inputTokens = Math.max(0, Number(item.inputTokens || 0)); item.outputTokens = Math.max(0, Number(item.outputTokens || 0)); item.webSearchCalls = Math.max(0, Number(item.webSearchCalls || 0)); item.estimatedCostUsd = Math.max(0, Number(item.estimatedCostUsd || 0)); return item; });
     return data;
   }
 
@@ -867,17 +898,15 @@
     var todayItems = homeworkForStudent(studentId).filter(function (item) { return evaluationDate(item) === todayString(); }).sort(function (a, b) {
       return String(a.createdAt || '').localeCompare(String(b.createdAt || '')) || homeworkBookName(a).localeCompare(homeworkBookName(b));
     });
-    var books = [];
+    var groups = {};
     todayItems.forEach(function (item) {
-      var book = item.bookId ? getBook(item.bookId) : null;
-      if (book && !books.some(function (savedBook) { return savedBook.id === book.id; })) books.push(book);
+      var name = homeworkBookName(item);
+      if (!groups[name]) groups[name] = [];
+      groups[name].push(item);
     });
-    var lines = books.map(function (book) {
-      var items = todayItems.filter(function (item) { return item.bookId === book.id; });
-      return '- ' + book.name + ': ' + items.map(evaluationHomeworkItemText).join(' / ');
+    var lines = Object.keys(groups).map(function (name) {
+      return '- ' + name + ': ' + groups[name].map(evaluationHomeworkItemText).join(' / ');
     });
-    var directItems = todayItems.filter(function (item) { return !item.bookId || !getBook(item.bookId); });
-    if (directItems.length) lines.push('- 기타: ' + directItems.map(evaluationHomeworkItemText).join(' / '));
     if (!lines.length) lines.push('- 오늘 등록한 숙제가 없습니다.');
     return { text: lines.join('\n'), items: todayItems };
   }
@@ -1080,20 +1109,26 @@
       'gpt-5.6-luna': { input: 1.00, output: 6.00 }
     };
     var price = prices[model] || prices['gpt-5-nano'];
-    return ((Number(usage.inputTokens || 0) * price.input) + (Number(usage.outputTokens || 0) * price.output)) / 1000000;
+    var tokenCost = ((Number(usage.inputTokens || 0) * price.input) + (Number(usage.outputTokens || 0) * price.output)) / 1000000;
+    var webSearchCost = Math.max(0, Number(usage.webSearchCalls || 0)) * 0.01;
+    return tokenCost + webSearchCost;
   }
 
-  function recordAiUsage(payload, studentId, teacherId) {
+  function recordAiUsage(payload, studentId, teacherId, metadata) {
     if (!payload || normalizeAiProvider(payload.provider) === 'local') return null;
     var usage = payload.usage || {};
+    metadata = metadata || {};
     var record = {
       id: uid('usage'),
       studentId: studentId || '',
       teacherId: teacherId || '',
+      kind: metadata.kind === 'book-search' ? 'book-search' : 'evaluation',
+      label: String(metadata.label || ''),
       provider: normalizeAiProvider(payload.provider),
       model: payload.model || AI_PROVIDERS[normalizeAiProvider(payload.provider)].model,
       inputTokens: Math.max(0, Number(usage.inputTokens || 0)),
       outputTokens: Math.max(0, Number(usage.outputTokens || 0)),
+      webSearchCalls: Math.max(0, Number(usage.webSearchCalls || 0)),
       estimatedCostUsd: 0,
       createdAt: new Date().toISOString()
     };
@@ -1107,7 +1142,9 @@
 
   function currentMonthAiUsage() {
     var prefix = todayString().slice(0, 7);
-    return (state.aiUsage || []).filter(function (item) { return String(item.createdAt || '').slice(0, 7) === prefix; }).reduce(function (sum, item) {
+    return (state.aiUsage || []).filter(function (item) {
+      return item.kind !== 'book-search' && String(item.createdAt || '').slice(0, 7) === prefix;
+    }).reduce(function (sum, item) {
       sum.calls += 1;
       sum.inputTokens += Number(item.inputTokens || 0);
       sum.outputTokens += Number(item.outputTokens || 0);
@@ -1575,6 +1612,47 @@
     }).join('');
   }
 
+  function normalizeHomeworkType(value, item) {
+    var type = String(value || '').trim();
+    if (['book','mock','print'].indexOf(type) !== -1) return type;
+    return item && item.bookId ? 'book' : 'print';
+  }
+
+  function homeworkItemType(item) {
+    return normalizeHomeworkType(item && item.homeworkType, item);
+  }
+
+  function homeworkTypeLabel(type) {
+    return ({ book: '교재', mock: '모의고사', print: '프린트·기타' })[normalizeHomeworkType(type)] || '교재';
+  }
+
+  function mockHomeworkRangeLabel(startValue, endValue) {
+    var start = Math.max(1, Number(startValue || 1));
+    var end = Math.max(start, Number(endValue || start));
+    return start === end ? start + '회' : start + '회 ~ ' + end + '회';
+  }
+
+  function homeworkResourceSuggestions(type) {
+    var seen = {};
+    return (state.homework || []).slice().sort(function (a, b) {
+      return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+    }).reduce(function (names, item) {
+      if (homeworkItemType(item) !== type) return names;
+      var name = String(item.bookName || '').trim();
+      var key = name.toLocaleLowerCase();
+      if (!name || seen[key]) return names;
+      seen[key] = true;
+      names.push(name);
+      return names;
+    }, []).slice(0, 30);
+  }
+
+  function homeworkResourceDatalist(type) {
+    return homeworkResourceSuggestions(type).map(function (name) {
+      return '<option value="' + escapeHtml(name) + '"></option>';
+    }).join('');
+  }
+
   function studentAssignments(studentId) {
     return activeAssignments().filter(function (assignment) { return assignment.studentId === studentId; });
   }
@@ -1598,12 +1676,14 @@
 
   function homeworkBookName(item) {
     var book = item && item.bookId ? getBook(item.bookId) : null;
-    return book ? book.name : (item && item.bookName ? item.bookName : '직접 입력');
+    return book ? book.name : (item && item.bookName ? item.bookName : homeworkTypeLabel(homeworkItemType(item)));
   }
 
   function homeworkDisplayText(item) {
     var book = item && item.bookId ? getBook(item.bookId) : null;
-    return book ? homeworkRangeLabel(book, item.startUnit, item.endUnit) : String(item && item.title || '숙제');
+    if (book) return homeworkRangeLabel(book, item.startUnit, item.endUnit);
+    if (homeworkItemType(item) === 'mock') return mockHomeworkRangeLabel(item.rangeStart, item.rangeEnd);
+    return String(item && item.title || '숙제');
   }
 
   function applyHomeworkBookRange(item, bookId, startUnit, endUnit) {
@@ -1613,6 +1693,7 @@
     var end = Math.max(start, Math.min(book.unitCount || start, Number(endUnit || start)));
     item.bookId = book.id;
     item.bookName = book.name;
+    item.homeworkType = 'book';
     item.startUnit = start;
     item.endUnit = end;
     item.title = homeworkRangeLabel(book, start, end);
@@ -1900,10 +1981,20 @@
     var rows = filteredHomework().map(function (item) {
       var student = getStudent(item.studentId);
       var book = getBook(item.bookId);
-      var rangeControl = book ? '<div class="homework-range-controls"><select class="select" data-action="update-homework-start">' + homeworkUnitOptions(book, item.startUnit) + '</select><span>~</span><select class="select" data-action="update-homework-end">' + homeworkUnitOptions(book, item.endUnit) + '</select></div>' : '<input class="field" data-action="update-homework" data-field="title" value="' + escapeHtml(item.title || '') + '">';
-      return '<tr data-homework-id="' + item.id + '"><td>' + escapeHtml(teacherNamesForStudent(student)) + '</td><td>' + escapeHtml(student.name) + '</td><td><select class="select" data-action="update-homework-book">' + homeworkBookOptions(item.studentId, item.bookId, true) + '</select></td><td>' + rangeControl + '</td><td><input class="field" type="date" data-action="update-homework" data-field="dueDate" value="' + escapeHtml(item.dueDate || '') + '"></td><td><select class="select" data-action="update-homework" data-field="status">' + homeworkStatusOptions(item.status) + '</select></td><td><input class="field" data-action="update-homework" data-field="memo" value="' + escapeHtml(item.memo || '') + '"></td><td><div class="row-actions"><button class="mini-button danger" data-action="delete-homework" title="삭제" aria-label="삭제">×</button></div></td></tr>';
+      var type = homeworkItemType(item);
+      var resourceControl = book
+        ? '<select class="select" data-action="update-homework-book">' + homeworkBookOptions(item.studentId, item.bookId, false) + '</select>'
+        : '<div class="homework-resource-cell"><span class="homework-type-badge ' + type + '">' + homeworkTypeLabel(type) + '</span><input class="field" data-action="update-homework" data-field="bookName" value="' + escapeHtml(item.bookName || '') + '" aria-label="자료명"></div>';
+      var rangeControl = book
+        ? '<div class="homework-range-controls"><select class="select" data-action="update-homework-start">' + homeworkUnitOptions(book, item.startUnit) + '</select><span>~</span><select class="select" data-action="update-homework-end">' + homeworkUnitOptions(book, item.endUnit) + '</select></div>'
+        : type === 'mock'
+          ? '<div class="homework-range-controls homework-round-controls"><input class="field" type="number" min="1" data-action="update-homework-mock-range" data-field="rangeStart" value="' + escapeHtml(item.rangeStart || 1) + '" aria-label="시작 회차"><span>~</span><input class="field" type="number" min="1" data-action="update-homework-mock-range" data-field="rangeEnd" value="' + escapeHtml(item.rangeEnd || item.rangeStart || 1) + '" aria-label="끝 회차"><span>회</span></div>'
+          : '<input class="field" data-action="update-homework" data-field="title" value="' + escapeHtml(item.title || '') + '" aria-label="숙제 범위">';
+      return '<tr data-homework-id="' + item.id + '"><td>' + escapeHtml(teacherNamesForStudent(student)) + '</td><td>' + escapeHtml(student.name) + '</td><td>' + resourceControl + '</td><td>' + rangeControl + '</td><td><input class="field" type="date" data-action="update-homework" data-field="dueDate" value="' + escapeHtml(item.dueDate || '') + '"></td><td><select class="select" data-action="update-homework" data-field="status">' + homeworkStatusOptions(item.status) + '</select></td><td><input class="field" data-action="update-homework" data-field="memo" value="' + escapeHtml(item.memo || '') + '"></td><td><div class="row-actions"><button class="mini-button danger" data-action="delete-homework" title="삭제" aria-label="삭제">×</button></div></td></tr>';
     }).join('');
     var advanced = ui.showHomeworkFilters ? '<div class="filters advanced-filters"><select class="select" id="homeworkStudentFilter">' + studentOptions(ui.homeworkStudentId, true, ui.homeworkTeacherId) + '</select><select class="select" id="homeworkBookFilter">' + bookOptions(ui.homeworkBookId, true) + '</select><select class="select" id="homeworkStatusFilter"><option value="all" ' + (ui.homeworkStatus === 'all' ? 'selected' : '') + '>전체 상태</option><option value="todo" ' + (ui.homeworkStatus === 'todo' ? 'selected' : '') + '>예정</option><option value="partial" ' + (ui.homeworkStatus === 'partial' ? 'selected' : '') + '>일부 완료</option><option value="done" ' + (ui.homeworkStatus === 'done' ? 'selected' : '') + '>완료</option><option value="missing" ' + (ui.homeworkStatus === 'missing' ? 'selected' : '') + '>미제출</option></select></div>' : '';
+    var entryType = normalizeHomeworkType(ui.homeworkEntryType);
+    var entryTypeSwitch = '<div class="segmented-control homework-entry-switch" role="group" aria-label="숙제 종류"><button type="button" class="segment-button ' + (entryType === 'book' ? 'active' : '') + '" data-action="select-homework-entry-type" data-homework-type="book">교재 숙제</button><button type="button" class="segment-button ' + (entryType === 'mock' ? 'active' : '') + '" data-action="select-homework-entry-type" data-homework-type="mock">모의고사</button><button type="button" class="segment-button ' + (entryType === 'print' ? 'active' : '') + '" data-action="select-homework-entry-type" data-homework-type="print">프린트·기타</button></div>';
     var batchBooks = selection.books.filter(function (book) { return book.unitCount > 0; });
     var batchRows = batchBooks.map(function (book) {
       var assignment = getAssignment(ui.homeworkFormStudentId, book.id);
@@ -1911,8 +2002,37 @@
       return '<div class="homework-batch-row" data-homework-batch-book-id="' + book.id + '"><label class="homework-batch-book"><input type="checkbox" data-action="select-homework-batch-book" aria-label="' + escapeHtml(book.name) + ' 숙제 선택"><span><strong>' + escapeHtml(book.name) + '</strong><small>' + bookSubjectLabel(book.subject) + ' · ' + book.unitCount + '단원</small></span></label><label class="stacked-field"><span>시작 단원</span><select class="select" data-role="homework-batch-start" disabled>' + homeworkUnitOptions(book, defaultUnit) + '</select></label><label class="stacked-field"><span>끝 단원</span><select class="select" data-role="homework-batch-end" disabled>' + homeworkUnitOptions(book, defaultUnit) + '</select></label><label class="stacked-field homework-batch-memo"><span>메모</span><input class="field" data-role="homework-batch-memo" placeholder="메모" disabled></label></div>';
     }).join('');
     var batchEmpty = selection.student ? emptyState('배정된 책이 없습니다', '책 배정 화면에서 이 학생이 사용하는 책을 먼저 체크하세요.') : emptyState('학생이 없습니다', '학생을 먼저 추가하세요.');
+    var entryBody = '';
+    var entryMeta = '';
+    var entryAction = '';
+    var submitLabel = '';
+    if (entryType === 'book') {
+      entryMeta = batchBooks.length + '권';
+      entryAction = '<button class="secondary-button compact-button" type="button" id="toggleAllHomeworkBatch" ' + (batchBooks.length ? '' : 'disabled') + '>모두 선택</button>';
+      entryBody = '<div class="homework-batch-list">' + (batchRows || batchEmpty) + '</div>';
+      submitLabel = '선택한 숙제 <span id="homeworkBatchSelectedCount">0</span>개 등록';
+    } else if (entryType === 'mock') {
+      entryMeta = '책 목록에 추가되지 않음';
+      entryAction = '<span class="muted">최근 자료명 자동완성</span>';
+      entryBody = '<div class="panel-body homework-direct-fields homework-direct-mock"><label class="stacked-field homework-resource-name"><span>모의고사명</span><input class="field" id="homeworkResourceName" name="resourceName" list="homeworkResourceSuggestions" value="' + escapeHtml(ui.homeworkResourceName) + '" placeholder="예: 나르샤 모의고사" required></label><label class="stacked-field"><span>시작 회차</span><input class="field" id="homeworkResourceStart" name="rangeStart" type="number" min="1" value="' + escapeHtml(ui.homeworkResourceStart) + '" required></label><label class="stacked-field"><span>끝 회차</span><input class="field" id="homeworkResourceEnd" name="rangeEnd" type="number" min="1" value="' + escapeHtml(ui.homeworkResourceEnd) + '" required></label><label class="stacked-field homework-direct-memo"><span>메모</span><input class="field" id="homeworkResourceMemo" name="memo" value="' + escapeHtml(ui.homeworkResourceMemo) + '" placeholder="예: 시간 재고 풀기"></label><datalist id="homeworkResourceSuggestions">' + homeworkResourceDatalist('mock') + '</datalist></div>';
+      submitLabel = '모의고사 등록';
+    } else {
+      entryMeta = '책 목록에 추가되지 않음';
+      entryAction = '<span class="muted">최근 자료명 자동완성</span>';
+      entryBody = '<div class="panel-body homework-direct-fields"><label class="stacked-field homework-resource-name"><span>자료명</span><input class="field" id="homeworkResourceName" name="resourceName" list="homeworkResourceSuggestions" value="' + escapeHtml(ui.homeworkResourceName) + '" placeholder="예: 계산 프린트물" required></label><label class="stacked-field homework-resource-range"><span>범위</span><input class="field" id="homeworkResourceRange" name="rangeText" value="' + escapeHtml(ui.homeworkResourceRange) + '" placeholder="예: 101~110번" required></label><label class="stacked-field homework-direct-memo"><span>메모</span><input class="field" id="homeworkResourceMemo" name="memo" value="' + escapeHtml(ui.homeworkResourceMemo) + '" placeholder="예: 풀이 과정 표시"></label><datalist id="homeworkResourceSuggestions">' + homeworkResourceDatalist('print') + '</datalist></div>';
+      submitLabel = '프린트·기타 등록';
+    }
+    var homeworkStudentSearchQuery = compactStudentSearchText(ui.homeworkStudentQuery);
+    var homeworkStudentCandidates = studentsByTeacher(ui.homeworkTeacherId);
+    var homeworkStudentMatches = homeworkStudentCandidates.filter(function (student) { return studentMatchesSearch(student, ui.homeworkStudentQuery); });
+    var homeworkStudentButtons = homeworkStudentCandidates.map(function (student) {
+      var visible = homeworkStudentSearchQuery && studentMatchesSearch(student, ui.homeworkStudentQuery);
+      return '<button type="button" class="homework-student-result ' + (student.id === ui.homeworkFormStudentId ? 'selected' : '') + '" data-action="select-homework-form-student" data-student-id="' + student.id + '" ' + (visible ? '' : 'hidden') + '>' + escapeHtml(student.name) + '</button>';
+    }).join('');
+    var selectedHomeworkStudent = getStudent(ui.homeworkFormStudentId);
+    var homeworkStudentPicker = '<div class="stacked-field homework-student-picker"><span>학생</span><input class="field student-search-input" id="homeworkStudentSearchInput" type="search" value="' + escapeHtml(ui.homeworkStudentQuery) + '" placeholder="이름 또는 초성 검색" autocomplete="off" aria-label="숙제 등록 학생 검색"><input type="hidden" name="studentId" value="' + escapeHtml(ui.homeworkFormStudentId || '') + '"><div class="homework-current-student"><span>선택</span><strong>' + escapeHtml(selectedHomeworkStudent ? selectedHomeworkStudent.name : '학생 없음') + '</strong></div><div class="homework-student-results" id="homeworkStudentSearchResults" ' + (homeworkStudentSearchQuery ? '' : 'hidden') + '>' + homeworkStudentButtons + '<span class="homework-student-empty" id="homeworkStudentSearchEmpty" ' + (homeworkStudentMatches.length ? 'hidden' : '') + '>검색 결과가 없습니다.</span></div></div>';
     var batchNotice = ui.homeworkBatchNotice ? '<p class="homework-batch-notice">' + escapeHtml(ui.homeworkBatchNotice) + '</p>' : '<span></span>';
-    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>숙제</h2><p>' + filteredHomework().length + '건</p></div><button class="primary-button" id="openTodayHomeworkEvaluations">오늘 숙제 학생 AI 평가</button></div><section class="panel"><div class="panel-body"><div class="filter-row"><select class="select" id="homeworkTeacherFilter">' + teacherOptions(ui.homeworkTeacherId, true, true) + '</select><button class="secondary-button" id="toggleHomeworkFilters">필터</button></div>' + advanced + '</div></section><section class="panel homework-batch-panel"><div class="panel-head"><div><h3>숙제 일괄 등록</h3><span class="muted">' + batchBooks.length + '권</span></div><button class="secondary-button compact-button" type="button" id="toggleAllHomeworkBatch" ' + (batchBooks.length ? '' : 'disabled') + '>모두 선택</button></div><form id="homeworkBatchForm"><div class="panel-body homework-batch-shared"><label class="stacked-field"><span>학생</span><select class="select" id="homeworkFormStudent" name="studentId" required>' + studentOptions(ui.homeworkFormStudentId, false, ui.homeworkTeacherId) + '</select></label><label class="stacked-field"><span>기한</span><input class="field" id="homeworkBatchDueDate" name="dueDate" type="date" value="' + escapeHtml(ui.homeworkBatchDueDate) + '"></label><label class="stacked-field"><span>상태</span><select class="select" id="homeworkBatchStatus" name="status">' + homeworkStatusOptions(ui.homeworkBatchStatus) + '</select></label></div><div class="homework-batch-list">' + (batchRows || batchEmpty) + '</div><div class="panel-body homework-batch-footer">' + batchNotice + '<button class="primary-button" id="addHomeworkBatch" type="submit" disabled>선택한 숙제 <span id="homeworkBatchSelectedCount">0</span>개 등록</button></div></form></section><section class="panel"><div class="panel-head"><h3>숙제 목록</h3><span class="muted">' + filteredHomework().length + '건</span></div><div class="table-wrap"><table class="homework-table"><thead><tr><th>선생님</th><th>학생</th><th>책</th><th>숙제 범위</th><th>기한</th><th>상태</th><th>메모</th><th class="numeric">관리</th></tr></thead><tbody>' + (rows || '<tr><td colspan="8">' + emptyState('숙제가 없습니다', '학생별 숙제를 추가하세요.') + '</td></tr>') + '</tbody></table></div></section></div>';
+    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>숙제</h2><p>' + filteredHomework().length + '건</p></div><button class="primary-button" id="openTodayHomeworkEvaluations">오늘 숙제 학생 AI 평가</button></div><section class="panel"><div class="panel-body"><div class="filter-row"><select class="select" id="homeworkTeacherFilter">' + teacherOptions(ui.homeworkTeacherId, true, true) + '</select><button class="secondary-button" id="toggleHomeworkFilters">필터</button></div>' + advanced + '</div></section><section class="panel homework-batch-panel"><div class="panel-head"><div><h3>숙제 등록</h3><span class="muted">' + escapeHtml(entryMeta) + '</span></div>' + entryAction + '</div><form id="homeworkBatchForm"><input type="hidden" name="homeworkType" value="' + entryType + '"><div class="panel-body homework-type-bar">' + entryTypeSwitch + '</div><div class="panel-body homework-batch-shared">' + homeworkStudentPicker + '<label class="stacked-field"><span>기한</span><input class="field" id="homeworkBatchDueDate" name="dueDate" type="date" value="' + escapeHtml(ui.homeworkBatchDueDate) + '"></label><label class="stacked-field"><span>상태</span><select class="select" id="homeworkBatchStatus" name="status">' + homeworkStatusOptions(ui.homeworkBatchStatus) + '</select></label></div>' + entryBody + '<div class="panel-body homework-batch-footer">' + batchNotice + '<button class="primary-button" id="addHomeworkBatch" type="submit" ' + (entryType === 'book' ? 'disabled' : '') + '>' + submitLabel + '</button></div></form></section><section class="panel"><div class="panel-head"><h3>숙제 목록</h3><span class="muted">' + filteredHomework().length + '건</span></div><div class="table-wrap"><table class="homework-table"><thead><tr><th>선생님</th><th>학생</th><th>책·자료</th><th>숙제 범위</th><th>기한</th><th>상태</th><th>메모</th><th class="numeric">관리</th></tr></thead><tbody>' + (rows || '<tr><td colspan="8">' + emptyState('숙제가 없습니다', '학생별 숙제를 추가하세요.') + '</td></tr>') + '</tbody></table></div></section></div>';
   }
 
   function renderConsultSchedule() {
@@ -2123,6 +2243,7 @@
       ui.bookSearchResults = (Array.isArray(payload.results) ? payload.results : []).map(normalizeBookSearchResult).filter(function (item) {
         return item.title && item.units.length;
       });
+      recordAiUsage(payload, '', '', { kind: 'book-search', label: query });
       ui.bookSearchStatus = payload.message || (ui.bookSearchResults.length ? ui.bookSearchResults.length + '개의 판본 후보를 찾았습니다.' : '확인 가능한 단원 목록을 찾지 못했습니다.');
       ui.bookSearchError = !ui.bookSearchResults.length;
     }).catch(function (error) {
@@ -2310,7 +2431,7 @@
       return;
     }
     var teacherIds = studentTeacherIds(student);
-    var item = { id: uid('hw'), studentId: student.id, teacherIds: teacherIds, teacherId: teacherIds[0] || '', title: '', bookId: book.id, bookName: book.name, startUnit: start, endUnit: end, dueDate: ui.progressHomeworkDueDate || '', status: 'todo', memo: ui.progressHomeworkMemo.trim(), createdAt: new Date().toISOString() };
+    var item = { id: uid('hw'), studentId: student.id, teacherIds: teacherIds, teacherId: teacherIds[0] || '', homeworkType: 'book', title: '', bookId: book.id, bookName: book.name, startUnit: start, endUnit: end, dueDate: ui.progressHomeworkDueDate || '', status: 'todo', memo: ui.progressHomeworkMemo.trim(), createdAt: new Date().toISOString() };
     applyHomeworkBookRange(item, book.id, start, end);
     state.homework.push(item);
     saveState();
@@ -2614,19 +2735,79 @@
     ({ dashboard: renderDashboard, alerts: renderAlerts, students: renderStudents, detail: renderStudentDetail, consultSchedule: renderConsultSchedule, teachers: renderTeachers, books: renderBooks, assignments: renderAssignments, progress: renderProgress, homework: renderHomework, quick: renderQuick, ai: renderAiEvaluation, data: renderData })[ui.activeTab]();
   }
 
-  function addStudent(form) { var data = new FormData(form); var name = String(data.get('name') || '').trim(); if (!name) return; var teacherIds = normalizeTeacherIdList(String(data.get('teacherId') || '').trim()); state.students.push({ id: uid('stu'), name: name, teacherIds: teacherIds, teacherId: teacherIds[0] || '', memo: String(data.get('memo') || '').trim() }); saveState(); render(); }
+  function addStudent(form) {
+    var data = new FormData(form);
+    var name = String(data.get('name') || '').trim();
+    if (!name) return;
+    var duplicate = state.students.find(function (student) {
+      return compactStudentSearchText(student.name) === compactStudentSearchText(name);
+    });
+    if (duplicate) {
+      alert(duplicate.name + ' 학생은 이미 등록되어 있습니다.');
+      return;
+    }
+    var teacherIds = normalizeTeacherIdList(String(data.get('teacherId') || '').trim());
+    state.students.push({ id: uid('stu'), name: name, teacherIds: teacherIds, teacherId: teacherIds[0] || '', memo: String(data.get('memo') || '').trim() });
+    saveState();
+    render();
+  }
   function addTeacher(form) { var data = new FormData(form); var name = String(data.get('name') || '').trim(); if (!name) return; var selectedStyle = normalizeAiTeacherStyle(data.get('aiStyle')); var songProfile = isSongGyumanTeacherName(name) || selectedStyle === 'song-gyuman'; state.teachers.push({ id: uid('teacher'), name: name, aiStyle: songProfile ? 'issue-action' : selectedStyle, aiStyleProfile: songProfile ? 'song-gyuman' : '', memo: String(data.get('memo') || '').trim() }); saveState(); render(); }
   function addHomeworkBatch(form) {
     var data = new FormData(form);
     var studentId = String(data.get('studentId') || '').trim();
     var student = getStudent(studentId);
-    var selected = Array.prototype.slice.call(form.querySelectorAll('[data-action="select-homework-batch-book"]:checked'));
-    if (!student || !selected.length) { alert('등록할 책을 한 권 이상 선택하세요.'); return; }
+    var homeworkType = normalizeHomeworkType(data.get('homeworkType') || ui.homeworkEntryType);
+    if (!student) { alert('학생을 선택하세요.'); return; }
     var teacherIds = studentTeacherIds(student);
     var dueDate = String(data.get('dueDate') || '').trim();
     var status = ['todo','partial','done','missing'].indexOf(String(data.get('status') || 'todo')) !== -1 ? String(data.get('status') || 'todo') : 'todo';
     var createdAt = new Date().toISOString();
     var added = 0;
+    if (homeworkType !== 'book') {
+      var resourceName = String(data.get('resourceName') || '').trim();
+      var memo = String(data.get('memo') || '').trim();
+      if (!resourceName) { alert(homeworkType === 'mock' ? '모의고사명을 입력하세요.' : '자료명을 입력하세요.'); return; }
+      var item = {
+        id: uid('hw'),
+        studentId: studentId,
+        teacherIds: teacherIds,
+        teacherId: teacherIds[0] || '',
+        homeworkType: homeworkType,
+        title: '',
+        bookId: '',
+        bookName: resourceName,
+        dueDate: dueDate,
+        status: status,
+        memo: memo,
+        createdAt: createdAt
+      };
+      if (homeworkType === 'mock') {
+        var rangeStart = Math.max(1, Number(data.get('rangeStart') || 1));
+        var rangeEnd = Math.max(rangeStart, Number(data.get('rangeEnd') || rangeStart));
+        item.rangeStart = rangeStart;
+        item.rangeEnd = rangeEnd;
+        item.title = mockHomeworkRangeLabel(rangeStart, rangeEnd);
+        ui.homeworkResourceStart = rangeStart;
+        ui.homeworkResourceEnd = rangeEnd;
+      } else {
+        var rangeText = String(data.get('rangeText') || '').trim();
+        if (!rangeText) { alert('숙제 범위를 입력하세요.'); return; }
+        item.title = rangeText;
+        ui.homeworkResourceRange = rangeText;
+      }
+      state.homework.push(item);
+      ui.homeworkEntryType = homeworkType;
+      ui.homeworkResourceName = resourceName;
+      ui.homeworkResourceMemo = '';
+      ui.homeworkBatchDueDate = dueDate;
+      ui.homeworkBatchStatus = status;
+      ui.homeworkBatchNotice = student.name + ' 학생에게 ' + homeworkTypeLabel(homeworkType) + ' 숙제를 등록했습니다.';
+      saveState();
+      renderHomework();
+      return;
+    }
+    var selected = Array.prototype.slice.call(form.querySelectorAll('[data-action="select-homework-batch-book"]:checked'));
+    if (!selected.length) { alert('등록할 책을 한 권 이상 선택하세요.'); return; }
     selected.forEach(function (checkbox) {
       var row = checkbox.closest('[data-homework-batch-book-id]');
       var bookId = row ? row.dataset.homeworkBatchBookId : '';
@@ -2638,9 +2819,9 @@
       var memoInput = row.querySelector('[data-role="homework-batch-memo"]');
       var startUnit = Number(startInput && startInput.value || 1);
       var endUnit = Math.max(startUnit, Number(endInput && endInput.value || startUnit));
-      var item = { id: uid('hw'), studentId: studentId, teacherIds: teacherIds, teacherId: teacherIds[0] || '', title: '', bookId: bookId, bookName: book.name, startUnit: startUnit, endUnit: endUnit, dueDate: dueDate, status: status, memo: String(memoInput && memoInput.value || '').trim(), createdAt: createdAt };
-      applyHomeworkBookRange(item, bookId, startUnit, endUnit);
-      state.homework.push(item);
+      var bookItem = { id: uid('hw'), studentId: studentId, teacherIds: teacherIds, teacherId: teacherIds[0] || '', homeworkType: 'book', title: '', bookId: bookId, bookName: book.name, startUnit: startUnit, endUnit: endUnit, dueDate: dueDate, status: status, memo: String(memoInput && memoInput.value || '').trim(), createdAt: createdAt };
+      applyHomeworkBookRange(bookItem, bookId, startUnit, endUnit);
+      state.homework.push(bookItem);
       added += 1;
     });
     if (!added) { alert('등록할 수 있는 숙제가 없습니다. 책 배정을 확인하세요.'); return; }
@@ -2733,6 +2914,7 @@
     if (action === 'update-homework-book' && homeworkRow) { var bookHomework = state.homework.find(function (item) { return item.id === homeworkRow.dataset.homeworkId; }); if (!bookHomework) return; applyHomeworkBookRange(bookHomework, target.value, 1, 1); saveState(); render(); }
     if (action === 'update-homework-start' && homeworkRow) { var startHomework = state.homework.find(function (item) { return item.id === homeworkRow.dataset.homeworkId; }); if (!startHomework) return; applyHomeworkBookRange(startHomework, startHomework.bookId, Number(target.value), startHomework.endUnit); saveState(); render(); }
     if (action === 'update-homework-end' && homeworkRow) { var endHomework = state.homework.find(function (item) { return item.id === homeworkRow.dataset.homeworkId; }); if (!endHomework) return; applyHomeworkBookRange(endHomework, endHomework.bookId, endHomework.startUnit, Number(target.value)); saveState(); render(); }
+    if (action === 'update-homework-mock-range' && homeworkRow) { var mockHomework = state.homework.find(function (item) { return item.id === homeworkRow.dataset.homeworkId; }); if (!mockHomework) return; var mockStart = target.dataset.field === 'rangeStart' ? Math.max(1, Number(target.value || 1)) : Math.max(1, Number(mockHomework.rangeStart || 1)); var mockEnd = target.dataset.field === 'rangeEnd' ? Math.max(1, Number(target.value || mockStart)) : Math.max(mockStart, Number(mockHomework.rangeEnd || mockStart)); mockEnd = Math.max(mockStart, mockEnd); mockHomework.rangeStart = mockStart; mockHomework.rangeEnd = mockEnd; mockHomework.title = mockHomeworkRangeLabel(mockStart, mockEnd); saveState(); render(); }
     if (action === 'select-homework-batch-book') { setHomeworkBatchRowEnabled(target); ui.homeworkBatchNotice = ''; updateHomeworkBatchSelectedCount(); }
     if (action === 'update-consult-setting') updateConsultationSetting(target.dataset.studentId, target.dataset.field, target.value, target.checked);
     if (action === 'update-consult-schedule' && consultRow) { var consult = (state.consultationSchedule || []).find(function (item) { return item.id === consultRow.dataset.consultId; }); if (!consult) return; consult[target.dataset.field] = target.value.trim(); saveState(); render(); }
@@ -2750,13 +2932,18 @@
     if (target.id === 'assignmentTeacherFilter') { ui.assignmentTeacherId = target.value; render(); }
     if (target.id === 'detailTeacherFilter') { ui.detailTeacherId = target.value; ui.detailStudentId = firstStudentIdForTeacher(ui.detailTeacherId); render(); }
     if (target.id === 'detailStudentSelect') { ui.detailStudentId = target.value; render(); }
-    if (target.id === 'homeworkTeacherFilter') { ui.homeworkTeacherId = target.value; ui.homeworkStudentId = 'all'; ui.homeworkFormStudentId = null; ui.homeworkFormBookId = null; render(); }
+    if (target.id === 'homeworkTeacherFilter') { ui.homeworkTeacherId = target.value; ui.homeworkStudentId = 'all'; ui.homeworkFormStudentId = null; ui.homeworkStudentQuery = ''; ui.homeworkFormBookId = null; render(); }
     if (target.id === 'homeworkStudentFilter') { ui.homeworkStudentId = target.value; render(); }
     if (target.id === 'homeworkBookFilter') { ui.homeworkBookId = target.value; render(); }
     if (target.id === 'homeworkStatusFilter') { ui.homeworkStatus = target.value; render(); }
-    if (target.id === 'homeworkFormStudent') { ui.homeworkFormStudentId = target.value; ui.homeworkFormBookId = null; ui.homeworkFormStartUnit = 1; ui.homeworkFormEndUnit = 1; ui.homeworkBatchNotice = ''; renderHomework(); }
+    if (target.id === 'homeworkFormStudent') { ui.homeworkFormStudentId = target.value; ui.homeworkStudentQuery = ''; ui.homeworkFormBookId = null; ui.homeworkFormStartUnit = 1; ui.homeworkFormEndUnit = 1; ui.homeworkBatchNotice = ''; renderHomework(); }
     if (target.id === 'homeworkBatchDueDate') { ui.homeworkBatchDueDate = target.value; ui.homeworkBatchNotice = ''; }
     if (target.id === 'homeworkBatchStatus') { ui.homeworkBatchStatus = target.value; ui.homeworkBatchNotice = ''; }
+    if (target.id === 'homeworkResourceName') { ui.homeworkResourceName = target.value.trim(); ui.homeworkBatchNotice = ''; }
+    if (target.id === 'homeworkResourceStart') { ui.homeworkResourceStart = Math.max(1, Number(target.value || 1)); if (ui.homeworkResourceEnd < ui.homeworkResourceStart) ui.homeworkResourceEnd = ui.homeworkResourceStart; ui.homeworkBatchNotice = ''; }
+    if (target.id === 'homeworkResourceEnd') { ui.homeworkResourceEnd = Math.max(ui.homeworkResourceStart, Number(target.value || ui.homeworkResourceStart)); ui.homeworkBatchNotice = ''; }
+    if (target.id === 'homeworkResourceRange') { ui.homeworkResourceRange = target.value.trim(); ui.homeworkBatchNotice = ''; }
+    if (target.id === 'homeworkResourceMemo') { ui.homeworkResourceMemo = target.value.trim(); ui.homeworkBatchNotice = ''; }
     if (target.dataset.role === 'homework-batch-start') { var startBatchRow = target.closest('[data-homework-batch-book-id]'); var batchEnd = startBatchRow && startBatchRow.querySelector('[data-role="homework-batch-end"]'); if (batchEnd && Number(batchEnd.value) < Number(target.value)) batchEnd.value = target.value; }
     if (target.dataset.role === 'homework-batch-end') { var endBatchRow = target.closest('[data-homework-batch-book-id]'); var batchStart = endBatchRow && endBatchRow.querySelector('[data-role="homework-batch-start"]'); if (batchStart && Number(target.value) < Number(batchStart.value)) target.value = batchStart.value; }
     if (target.id === 'homeworkFormBook') { ui.homeworkFormBookId = target.value; ui.homeworkFormStartUnit = 1; ui.homeworkFormEndUnit = 1; renderHomework(); }
@@ -2830,6 +3017,8 @@
     if (target.id === 'undoProgressRange') undoProgressRange();
     if (target.id === 'toggleQuickFilters') { ui.showQuickFilters = !ui.showQuickFilters; render(); }
     if (target.id === 'toggleHomeworkFilters') { ui.showHomeworkFilters = !ui.showHomeworkFilters; render(); }
+    if (action === 'select-homework-entry-type') { ui.homeworkEntryType = normalizeHomeworkType(target.dataset.homeworkType); ui.homeworkBatchNotice = ''; renderHomework(); }
+    if (action === 'select-homework-form-student') { ui.homeworkFormStudentId = target.dataset.studentId; ui.homeworkStudentQuery = ''; ui.homeworkFormBookId = null; ui.homeworkFormStartUnit = 1; ui.homeworkFormEndUnit = 1; ui.homeworkBatchNotice = ''; renderHomework(); }
     if (target.id === 'toggleAllHomeworkBatch') { var batchChecks = Array.prototype.slice.call(document.querySelectorAll('#homeworkBatchForm [data-action="select-homework-batch-book"]')); var checkAll = batchChecks.some(function (checkbox) { return !checkbox.checked; }); batchChecks.forEach(function (checkbox) { checkbox.checked = checkAll; setHomeworkBatchRowEnabled(checkbox); }); ui.homeworkBatchNotice = ''; updateHomeworkBatchSelectedCount(); }
     if (action === 'delete-homework') deleteHomework(target.closest('[data-homework-id]').dataset.homeworkId);
     if (action === 'delete-consult-schedule') deleteConsultationSchedule(target.closest('[data-consult-id]').dataset.consultId);
@@ -2845,6 +3034,20 @@
   });
 
   document.addEventListener('input', function (event) {
+    if (event.target.id === 'homeworkStudentSearchInput') {
+      ui.homeworkStudentQuery = event.target.value;
+      var homeworkQuery = compactStudentSearchText(ui.homeworkStudentQuery);
+      var homeworkResultCount = 0;
+      Array.prototype.forEach.call(document.querySelectorAll('.homework-student-result[data-student-id]'), function (button) {
+        var matchesHomeworkStudent = homeworkQuery && studentMatchesSearch(getStudent(button.dataset.studentId), ui.homeworkStudentQuery);
+        button.hidden = !matchesHomeworkStudent;
+        if (matchesHomeworkStudent) homeworkResultCount += 1;
+      });
+      var homeworkResults = document.querySelector('#homeworkStudentSearchResults');
+      if (homeworkResults) homeworkResults.hidden = !homeworkQuery;
+      var homeworkEmpty = document.querySelector('#homeworkStudentSearchEmpty');
+      if (homeworkEmpty) homeworkEmpty.hidden = !homeworkQuery || homeworkResultCount > 0;
+    }
     if (event.target.id === 'studentSearchInput') {
       ui.studentQuery = event.target.value;
       applyStudentSearchToDom(ui.studentQuery, '.students-table tbody tr[data-student-id]', 'studentVisibleCount', 'studentSearchEmpty');
