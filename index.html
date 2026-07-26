@@ -10,14 +10,17 @@
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./icon.svg">
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=47">
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div>
-        <p class="eyebrow">Student Progress</p>
-        <h1>학생별 책 진도관리</h1>
+      <div class="brand">
+        <span class="brand-accent" aria-hidden="true"></span>
+        <div>
+          <p class="eyebrow">Student Progress</p>
+          <h1>학생별 책 진도관리</h1>
+        </div>
       </div>
       <div class="top-actions">
         <button class="icon-button" id="exportJsonBtn" title="데이터 내보내기" aria-label="데이터 내보내기"><span aria-hidden="true">↓</span></button>
@@ -26,22 +29,32 @@
       </div>
     </header>
     <nav class="tabs" aria-label="주요 화면">
-      <button class="tab active" data-tab="dashboard">요약</button>
-      <button class="tab" data-tab="homework">숙제</button>
-      <button class="tab" data-tab="progress">진도 체크</button>
-      <button class="tab" data-tab="alerts">알림</button>
-      <button class="tab" data-tab="students">학생</button>
-      <button class="tab" data-tab="detail">학생 상세</button>
-      <button class="tab" data-tab="consultSchedule">상담 일정</button>
-      <button class="tab" data-tab="teachers">선생님</button>
-      <button class="tab" data-tab="books">책</button>
-      <button class="tab" data-tab="assignments">책 배정</button>
-      <button class="tab" data-tab="quick">빠른 체크</button>
-      <button class="tab" data-tab="ai">AI 평가</button>
-      <button class="tab" data-tab="data">데이터</button>
+      <div class="tab-group primary-tabs">
+        <span class="tab-group-label">주요 업무</span>
+        <button class="tab active" data-tab="dashboard">요약</button>
+        <button class="tab" data-tab="homework">숙제</button>
+        <button class="tab" data-tab="progress">진도 체크</button>
+        <button class="tab" data-tab="quick">빠른 체크</button>
+        <button class="tab" data-tab="ai">AI 평가</button>
+      </div>
+      <div class="tab-group">
+        <span class="tab-group-label">학생 관리</span>
+        <button class="tab" data-tab="alerts">알림</button>
+        <button class="tab" data-tab="students">학생</button>
+        <button class="tab" data-tab="detail">학생 상세</button>
+        <button class="tab" data-tab="consultSchedule">상담 일정</button>
+        <button class="tab" data-tab="teachers">선생님</button>
+      </div>
+      <div class="tab-group">
+        <span class="tab-group-label">교재 관리</span>
+        <button class="tab" data-tab="books">책</button>
+        <button class="tab" data-tab="assignments">책 배정</button>
+        <button class="tab" data-tab="data">데이터</button>
+      </div>
+      <div class="sidebar-student-jump" id="sidebarStudentJump"></div>
     </nav>
     <main id="view" class="view" aria-live="polite"></main>
   </div>
-  <script src="./app.js"></script>
+  <script src="./app.js?v=47"></script>
 </body>
 </html>

@@ -1,9 +1,9 @@
-const CACHE_NAME = 'student-progress-mobile-v45';
+const CACHE_NAME = 'student-progress-mobile-v47';
 const APP_FILES = [
   './',
   './index.html',
-  './styles.css',
-  './app.js',
+  './styles.css?v=47',
+  './app.js?v=47',
   './manifest.webmanifest',
   './icon.svg'
 ];
@@ -34,6 +34,22 @@ self.addEventListener('fetch', function (event) {
   var request = event.request;
   var url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== location.origin) return;
+
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request).then(function (response) {
+        if (response && response.ok) {
+          caches.open(CACHE_NAME).then(function (cache) {
+            cache.put('./index.html', response.clone());
+          });
+        }
+        return response;
+      }).catch(function () {
+        return caches.match('./index.html');
+      })
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(request).then(function (cached) {

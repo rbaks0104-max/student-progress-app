@@ -7,6 +7,7 @@
   var exportJsonBtn = document.querySelector('#exportJsonBtn');
   var ui = {
     activeTab: 'dashboard',
+    sidebarStudentQuery: '',
     selectedStudentId: null,
     dashboardTeacherId: 'all',
     studentTeacherId: 'all',
@@ -684,6 +685,32 @@
       if (title) title.textContent = compactStudentSearchText(query) ? '검색 결과가 없습니다' : '표시할 학생이 없습니다';
       if (body) body.textContent = compactStudentSearchText(query) ? '다른 이름이나 초성으로 검색해보세요.' : '필터를 바꾸거나 학생을 추가하세요.';
     }
+  }
+
+  function activeWorkspaceStudentId() {
+    if (ui.activeTab === 'detail') return ui.detailStudentId;
+    if (ui.activeTab === 'progress') return ui.progressStudentId;
+    if (ui.activeTab === 'quick') return ui.quickStudentId;
+    if (ui.activeTab === 'ai') return ui.aiStudentId;
+    if (ui.activeTab === 'homework') return ui.homeworkFormStudentId;
+    if (ui.activeTab === 'assignments') return ui.selectedStudentId;
+    return ui.detailStudentId || ui.selectedStudentId || null;
+  }
+
+  function renderSidebarStudentJump() {
+    var container = document.querySelector('#sidebarStudentJump');
+    if (!container) return;
+    var query = compactStudentSearchText(ui.sidebarStudentQuery);
+    var activeStudent = getStudent(activeWorkspaceStudentId());
+    var matches = studentsByTeacher('all').filter(function (student) {
+      return query && studentMatchesSearch(student, ui.sidebarStudentQuery);
+    });
+    var visibleIds = matches.slice(0, 8).map(function (student) { return student.id; });
+    var resultButtons = studentsByTeacher('all').map(function (student) {
+      var visible = visibleIds.indexOf(student.id) !== -1;
+      return '<button type="button" class="sidebar-student-result" data-action="open-sidebar-student" data-student-id="' + student.id + '" ' + (visible ? '' : 'hidden') + '>' + escapeHtml(student.name) + '</button>';
+    }).join('');
+    container.innerHTML = '<label class="sidebar-student-label" for="sidebarStudentSearchInput">학생 바로찾기</label><input class="field" id="sidebarStudentSearchInput" type="search" value="' + escapeHtml(ui.sidebarStudentQuery) + '" placeholder="이름·초성" autocomplete="off"><div class="sidebar-current-student"><span>현재</span><strong>' + escapeHtml(activeStudent ? activeStudent.name : '선택 없음') + '</strong></div><div class="sidebar-student-results" id="sidebarStudentResults" ' + (query ? '' : 'hidden') + '>' + resultButtons + '<span class="sidebar-student-empty" id="sidebarStudentEmpty" ' + (matches.length ? 'hidden' : '') + '>검색 결과 없음</span></div>';
   }
 
   function firstStudentIdForTeacher(teacherId) {
@@ -2795,6 +2822,7 @@
   function render() {
     tabs.forEach(function (tab) { tab.classList.toggle('active', tab.dataset.tab === ui.activeTab); });
     ({ dashboard: renderDashboard, alerts: renderAlerts, students: renderStudents, detail: renderStudentDetail, consultSchedule: renderConsultSchedule, teachers: renderTeachers, books: renderBooks, assignments: renderAssignments, progress: renderProgress, homework: renderHomework, quick: renderQuick, ai: renderAiEvaluation, data: renderData })[ui.activeTab]();
+    renderSidebarStudentJump();
   }
 
   function addStudent(form) {
@@ -3049,6 +3077,7 @@
 
   document.addEventListener('click', function (event) {
     var target = event.target.closest('button'); if (!target) return; var action = target.dataset.action;
+    if (action === 'open-sidebar-student') { ui.detailStudentId = target.dataset.studentId; var sidebarStudent = getStudent(ui.detailStudentId); ui.detailTeacherId = firstTeacherIdForStudent(sidebarStudent) || 'all'; ui.sidebarStudentQuery = ''; ui.activeTab = 'detail'; render(); }
     if (action === 'delete-student') deleteStudent(target.closest('[data-student-id]').dataset.studentId);
     if (action === 'delete-teacher') deleteTeacher(target.closest('[data-teacher-id]').dataset.teacherId);
     if (action === 'delete-book') deleteBook(target.closest('[data-book-id]').dataset.bookId);
@@ -3131,6 +3160,20 @@
   });
 
   document.addEventListener('input', function (event) {
+    if (event.target.id === 'sidebarStudentSearchInput') {
+      ui.sidebarStudentQuery = event.target.value;
+      var sidebarQuery = compactStudentSearchText(ui.sidebarStudentQuery);
+      var sidebarResultCount = 0;
+      Array.prototype.forEach.call(document.querySelectorAll('.sidebar-student-result[data-student-id]'), function (button) {
+        var matchesSidebarStudent = sidebarQuery && studentMatchesSearch(getStudent(button.dataset.studentId), ui.sidebarStudentQuery) && sidebarResultCount < 8;
+        button.hidden = !matchesSidebarStudent;
+        if (matchesSidebarStudent) sidebarResultCount += 1;
+      });
+      var sidebarResults = document.querySelector('#sidebarStudentResults');
+      if (sidebarResults) sidebarResults.hidden = !sidebarQuery;
+      var sidebarEmpty = document.querySelector('#sidebarStudentEmpty');
+      if (sidebarEmpty) sidebarEmpty.hidden = !sidebarQuery || sidebarResultCount > 0;
+    }
     if (event.target.id === 'quickStudentSearchInput') {
       ui.quickStudentQuery = event.target.value;
       var quickQuery = compactStudentSearchText(ui.quickStudentQuery);
