@@ -118,24 +118,39 @@ h3 { margin: 0; font-size: 15px; }
 .homework-type-badge.print { border-color: #99d5cf; background: #e6fffb; color: var(--teal); }
 .homework-batch-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); background: var(--surface-soft); }
 .homework-batch-notice { margin: 0; color: var(--teal); font-size: 13px; font-weight: 800; }
-.homework-table { min-width: 1450px; }
-.homework-table th:nth-child(1) { width: 9%; }
-.homework-table th:nth-child(2) { width: 9%; }
-.homework-table th:nth-child(3) { width: 16%; }
-.homework-table th:nth-child(4) { width: 25%; }
-.homework-table th:nth-child(5) { width: 14%; }
-.homework-table th:nth-child(6) { width: 11%; }
-.homework-table th:nth-child(7) { width: 11%; }
-.homework-table th:nth-child(8) { width: 5%; }
-.homework-table td:nth-child(3),
-.homework-table td:nth-child(4),
-.homework-table td:nth-child(5) { overflow: hidden; }
+.homework-list-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.homework-student-group-list { display: grid; }
+.homework-student-group { border-top: 1px solid var(--line); }
+.homework-student-group:first-child { border-top: 0; }
+.homework-student-summary { display: grid; grid-template-columns: 24px minmax(150px, .7fr) minmax(260px, 1.3fr); gap: 10px; align-items: center; width: 100%; min-height: 62px; padding: 10px 14px; border: 0; background: var(--surface); color: var(--text); text-align: left; }
+.homework-student-summary:hover { background: var(--surface-soft); }
+.homework-group-disclosure { color: var(--muted); font-size: 24px; line-height: 1; transition: transform .15s ease; }
+.homework-student-summary[aria-expanded="true"] .homework-group-disclosure { transform: rotate(90deg); }
+.homework-group-student { display: grid; gap: 3px; min-width: 0; }
+.homework-group-student strong, .homework-group-student small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.homework-group-student small { color: var(--muted); font-size: 11px; }
+.homework-group-meta { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; }
+.homework-group-badge { padding: 4px 7px; border-radius: 6px; background: var(--surface-soft); color: var(--muted); font-size: 11px; font-weight: 800; }
+.homework-group-badge.pending { background: var(--orange-soft); color: #9a3412; }
+.homework-group-badge.overdue { background: #fee2e2; color: #991b1b; }
+.homework-group-due { color: var(--muted); font-size: 11px; font-weight: 800; }
+.homework-student-content { border-top: 1px solid var(--line-soft); }
+.homework-table { min-width: 1080px; }
+.homework-table th:nth-child(1) { width: 22%; }
+.homework-table th:nth-child(2) { width: 30%; }
+.homework-table th:nth-child(3) { width: 15%; }
+.homework-table th:nth-child(4) { width: 12%; }
+.homework-table th:nth-child(5) { width: 16%; }
+.homework-table th:nth-child(6) { width: 5%; }
+.homework-table td:nth-child(1),
+.homework-table td:nth-child(2),
+.homework-table td:nth-child(3) { overflow: hidden; }
 .homework-range-controls { display: flex; width: 100%; min-width: 0; max-width: 100%; align-items: center; gap: 6px; overflow: hidden; }
 .homework-range-controls .select { flex: 1 1 0; width: 0; min-width: 0; max-width: none; text-overflow: ellipsis; }
 .homework-range-controls .field { flex: 1 1 0; width: 0; min-width: 0; max-width: none; }
 .homework-range-controls > span { color: var(--muted); text-align: center; font-weight: 800; }
 .homework-round-controls > span:last-child { flex: 0 0 auto; font-size: 12px; }
-.homework-table td:nth-child(5) .field { min-width: 0; max-width: 100%; }
+.homework-table td:nth-child(3) .field { min-width: 0; max-width: 100%; }
 .teacher-check-list { display: flex; flex-wrap: wrap; gap: 6px; min-width: 220px; }
 .teacher-check { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 12px; font-weight: 800; }
 .teacher-check:has(input:checked) { border-color: var(--blue); background: var(--blue-soft); color: var(--blue-strong); }
@@ -451,6 +466,10 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
   .homework-type-badge { justify-self: start; }
   .homework-batch-footer { align-items: stretch; flex-direction: column; }
   .homework-batch-footer .primary-button { width: 100%; }
+  .homework-list-actions { width: 100%; }
+  .homework-list-actions .secondary-button { flex: 1 1 0; }
+  .homework-student-summary { grid-template-columns: 20px minmax(0, 1fr); }
+  .homework-group-meta { grid-column: 2; justify-content: flex-start; }
   .assignment-table-wrap { overflow: visible; }
   .assignment-table, .assignment-table tbody, .assignment-table tr, .assignment-table td { display: block; width: 100%; }
   .assignment-table thead { display: none; }
