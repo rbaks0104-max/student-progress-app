@@ -109,6 +109,13 @@
       label: '송규만 선생님형',
       hint: '현재 강점과 약점을 직접 짚고 설명한 내용과 구체적인 지시를 이어서 정리',
       promptHint: '교재와 범위 다음에 관찰된 강점과 약점을 직접 서술하고, 그 원인이나 설명한 개념, 구체적인 지시 또는 당부 순으로 작성합니다. 기본적으로, 특히나, 전반적으로, 아직, 이에 대해서 설명해주었습니다, 그래서 ...하라고 지시하였습니다, 반드시 ... 당부하였습니다 같은 표현을 문맥에 맞게 사용하되 같은 표현을 반복하지 않습니다. 과장된 칭찬보다 실제 문제 풀이 습관과 개념 상태를 분명하게 적습니다.'
+    },
+    {
+      id: 'shin-yejin',
+      baseId: 'detailed-report',
+      label: '신예진 선생님형',
+      hint: '숙제 이행과 질문 내용을 확인하고 지문·문제 해설, 적용 방법, 다음 계획 순으로 차분히 정리',
+      promptHint: '국어 학습 상담 기록처럼 작성합니다. 주간 상담은 숙제 이행과 현재 진도를 먼저 확인하고, 학생이 어렵다고 하거나 질문한 작품·지문·문제를 구체적으로 적은 뒤, 함께 분석하거나 해설한 내용과 적용할 독해·문제풀이 방법, 다음 주 과제 또는 확인 계획 순으로 연결합니다. 질의 상담은 숙제 총평을 억지로 넣지 말고 질문받은 작품·지문, 어려워한 지점, 설명한 판단 근거와 개념, 추가로 확인할 내용 순으로 씁니다. 질문받아, 어렵다고 하여, 지문 분석하고 문제 해설했습니다, 설명했습니다, 얘기했습니다, 알려주었습니다, 하기로 했습니다, 주었습니다 같은 담백한 표현을 자연스럽게 사용합니다. 학생이 스스로 말한 학습 상황은 ...하고 있다고 합니다 또는 ...했다고 합니다로 구분합니다. 모든 내용을 과장 없이 실제 순서대로 쓰고, 구체적인 지문명·개념·과제는 입력에 있는 경우에만 사용합니다.'
     }
   ];
   var AI_PROVIDERS = {
@@ -169,7 +176,8 @@
       if (teacher.memo == null) teacher.memo = '';
       teacher.aiStyle = normalizeAiTeacherStyle(teacher.aiStyle);
       if (isSongGyumanTeacherName(teacher.name)) teacher.aiStyleProfile = 'song-gyuman';
-      else if (teacher.aiStyleProfile !== 'song-gyuman') teacher.aiStyleProfile = '';
+      else if (isShinYejinTeacherName(teacher.name)) teacher.aiStyleProfile = 'shin-yejin';
+      else if (['song-gyuman', 'shin-yejin'].indexOf(teacher.aiStyleProfile) === -1) teacher.aiStyleProfile = '';
     });
     data.homework.forEach(function (item) {
       var ids = normalizeTeacherIdList(item.teacherIds);
@@ -535,8 +543,17 @@
   function isSongGyumanTeacherName(name) {
     return String(name || '').replace(/\s+/g, '').replace(/선생님$/, '') === '송규만';
   }
+  function isShinYejinTeacherName(name) {
+    return String(name || '').replace(/\s+/g, '').replace(/선생님$/, '') === '신예진';
+  }
+  function namedAiTeacherStyleProfile(name) {
+    if (isSongGyumanTeacherName(name)) return 'song-gyuman';
+    if (isShinYejinTeacherName(name)) return 'shin-yejin';
+    return '';
+  }
   function effectiveAiTeacherStyle(teacher) {
     if (teacher && (teacher.aiStyleProfile === 'song-gyuman' || isSongGyumanTeacherName(teacher.name))) return aiTeacherStyle('song-gyuman');
+    if (teacher && (teacher.aiStyleProfile === 'shin-yejin' || isShinYejinTeacherName(teacher.name))) return aiTeacherStyle('shin-yejin');
     return aiTeacherStyle(teacher && teacher.aiStyle);
   }
   function aiTeacherStyleOptions(selectedId) {
@@ -1241,6 +1258,9 @@
     }
     if (style.id === 'song-gyuman') {
       return localEvaluationPrefix(reason) + name + ' 학생\n' + progressText + '\n\n기본적으로 ' + keywords + ' 부분을 확인하였습니다.' + memo + ' 아직 보완이 필요한 부분에 대해서 설명해주었습니다. 그래서 다음 수업 전까지 같은 부분을 다시 확인해오라고 지시하였습니다.';
+    }
+    if (style.id === 'shin-yejin') {
+      return localEvaluationPrefix(reason) + name + ' 학생의 이번주 학습 내용과 숙제 이행을 확인했습니다. ' + keywords + ' 부분을 질문받아 어려워한 지점을 함께 살펴보고 관련 내용과 판단 근거를 설명했습니다.' + memo + '\n\n다음 수업에서는 이번에 확인한 부분을 다시 점검하고 남은 학습을 이어가기로 했습니다.';
     }
     return localEvaluationPrefix(reason) + name + ' 학생은 ' + keywords + '의 모습이 관찰됩니다.' + memo + detail + closing;
   }
@@ -2038,6 +2058,19 @@
     return '<tr data-homework-id="' + item.id + '"><td>' + resourceControl + '</td><td>' + rangeControl + '</td><td><input class="field" type="date" data-action="update-homework" data-field="dueDate" value="' + escapeHtml(item.dueDate || '') + '"></td><td><select class="select" data-action="update-homework" data-field="status">' + homeworkStatusOptions(item.status) + '</select></td><td><input class="field" data-action="update-homework" data-field="memo" value="' + escapeHtml(item.memo || '') + '"></td><td><div class="row-actions"><button class="mini-button danger" data-action="delete-homework" title="삭제" aria-label="삭제">×</button></div></td></tr>';
   }
 
+  function syncHomeworkGroupToggleButton() {
+    var button = document.querySelector('#toggleAllHomeworkStudents');
+    if (!button) return;
+    var groups = Array.prototype.slice.call(document.querySelectorAll('[data-homework-student-group]'));
+    var allExpanded = groups.length > 0 && groups.every(function (group) {
+      var summary = group.querySelector('[data-action="toggle-homework-student-group"]');
+      return summary && summary.getAttribute('aria-expanded') === 'true';
+    });
+    button.dataset.nextState = allExpanded ? 'collapse' : 'expand';
+    button.setAttribute('aria-expanded', String(allExpanded));
+    button.textContent = allExpanded ? '전체 접기' : '전체 펼치기';
+  }
+
   function renderHomework() {
     var selection = ensureHomeworkFormSelection();
     var visibleHomework = filteredHomework();
@@ -2047,6 +2080,11 @@
       homeworkByStudent[item.studentId].push(item);
     });
     var homeworkStudents = sortedNamedItems(Object.keys(homeworkByStudent).map(getStudent).filter(Boolean));
+    var allHomeworkGroupsExpanded = homeworkStudents.length > 0 && homeworkStudents.every(function (student) {
+      return ui.homeworkStudentId === student.id || ui.homeworkExpandedStudentIds.indexOf(student.id) !== -1;
+    });
+    var homeworkGroupToggleLabel = allHomeworkGroupsExpanded ? '전체 접기' : '전체 펼치기';
+    var homeworkGroupNextState = allHomeworkGroupsExpanded ? 'collapse' : 'expand';
     var studentGroups = homeworkStudents.map(function (student) {
       var items = homeworkByStudent[student.id];
       var incompleteItems = items.filter(function (item) { return item.status !== 'done'; });
@@ -2099,7 +2137,7 @@
     var selectedHomeworkStudent = getStudent(ui.homeworkFormStudentId);
     var homeworkStudentPicker = '<div class="stacked-field homework-student-picker"><span>학생</span><input class="field student-search-input" id="homeworkStudentSearchInput" type="search" value="' + escapeHtml(ui.homeworkStudentQuery) + '" placeholder="이름 또는 초성 검색" autocomplete="off" aria-label="숙제 등록 학생 검색"><input type="hidden" name="studentId" value="' + escapeHtml(ui.homeworkFormStudentId || '') + '"><div class="homework-current-student"><span>선택</span><strong>' + escapeHtml(selectedHomeworkStudent ? selectedHomeworkStudent.name : '학생 없음') + '</strong></div><div class="homework-student-results" id="homeworkStudentSearchResults" ' + (homeworkStudentSearchQuery ? '' : 'hidden') + '>' + homeworkStudentButtons + '<span class="homework-student-empty" id="homeworkStudentSearchEmpty" ' + (homeworkStudentMatches.length ? 'hidden' : '') + '>검색 결과가 없습니다.</span></div></div>';
     var batchNotice = ui.homeworkBatchNotice ? '<p class="homework-batch-notice">' + escapeHtml(ui.homeworkBatchNotice) + '</p>' : '<span></span>';
-    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>숙제</h2><p>' + visibleHomework.length + '건</p></div><button class="primary-button" id="openTodayHomeworkEvaluations">오늘 숙제 학생 AI 평가</button></div><section class="panel"><div class="panel-body"><div class="filter-row"><select class="select" id="homeworkTeacherFilter">' + teacherOptions(ui.homeworkTeacherId, true, true) + '</select><button class="secondary-button" id="toggleHomeworkFilters">필터</button></div>' + advanced + '</div></section><section class="panel homework-batch-panel"><div class="panel-head"><div><h3>숙제 등록</h3><span class="muted">' + escapeHtml(entryMeta) + '</span></div>' + entryAction + '</div><form id="homeworkBatchForm"><input type="hidden" name="homeworkType" value="' + entryType + '"><div class="panel-body homework-type-bar">' + entryTypeSwitch + '</div><div class="panel-body homework-batch-shared">' + homeworkStudentPicker + '<label class="stacked-field"><span>기한</span><input class="field" id="homeworkBatchDueDate" name="dueDate" type="date" value="' + escapeHtml(ui.homeworkBatchDueDate) + '"></label><label class="stacked-field"><span>상태</span><select class="select" id="homeworkBatchStatus" name="status">' + homeworkStatusOptions(ui.homeworkBatchStatus) + '</select></label></div>' + entryBody + '<div class="panel-body homework-batch-footer">' + batchNotice + '<button class="primary-button" id="addHomeworkBatch" type="submit" ' + (entryType === 'book' ? 'disabled' : '') + '>' + submitLabel + '</button></div></form></section><section class="panel homework-list-panel"><div class="panel-head"><div><h3>숙제 목록</h3><span class="muted">학생 ' + homeworkStudents.length + '명 · ' + visibleHomework.length + '건</span></div><div class="homework-list-actions"><button type="button" class="secondary-button compact-button" id="expandAllHomeworkStudents">전체 펼치기</button><button type="button" class="secondary-button compact-button" id="collapseAllHomeworkStudents">전체 접기</button></div></div><div class="homework-student-group-list">' + (studentGroups || emptyState('숙제가 없습니다', '학생별 숙제를 추가하세요.')) + '</div></section></div>';
+    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>숙제</h2><p>' + visibleHomework.length + '건</p></div><button class="primary-button" id="openTodayHomeworkEvaluations">오늘 숙제 학생 AI 평가</button></div><section class="panel"><div class="panel-body"><div class="filter-row"><select class="select" id="homeworkTeacherFilter">' + teacherOptions(ui.homeworkTeacherId, true, true) + '</select><button class="secondary-button" id="toggleHomeworkFilters">필터</button></div>' + advanced + '</div></section><section class="panel homework-batch-panel"><div class="panel-head"><div><h3>숙제 등록</h3><span class="muted">' + escapeHtml(entryMeta) + '</span></div>' + entryAction + '</div><form id="homeworkBatchForm"><input type="hidden" name="homeworkType" value="' + entryType + '"><div class="panel-body homework-type-bar">' + entryTypeSwitch + '</div><div class="panel-body homework-batch-shared">' + homeworkStudentPicker + '<label class="stacked-field"><span>기한</span><input class="field" id="homeworkBatchDueDate" name="dueDate" type="date" value="' + escapeHtml(ui.homeworkBatchDueDate) + '"></label><label class="stacked-field"><span>상태</span><select class="select" id="homeworkBatchStatus" name="status">' + homeworkStatusOptions(ui.homeworkBatchStatus) + '</select></label></div>' + entryBody + '<div class="panel-body homework-batch-footer">' + batchNotice + '<button class="primary-button" id="addHomeworkBatch" type="submit" ' + (entryType === 'book' ? 'disabled' : '') + '>' + submitLabel + '</button></div></form></section><section class="panel homework-list-panel"><div class="panel-head"><div><h3>숙제 목록</h3><span class="muted">학생 ' + homeworkStudents.length + '명 · ' + visibleHomework.length + '건</span></div><div class="homework-list-actions"><button type="button" class="secondary-button compact-button" id="toggleAllHomeworkStudents" data-next-state="' + homeworkGroupNextState + '" aria-expanded="' + String(allHomeworkGroupsExpanded) + '" ' + (homeworkStudents.length ? '' : 'disabled') + '>' + homeworkGroupToggleLabel + '</button></div></div><div class="homework-student-group-list">' + (studentGroups || emptyState('숙제가 없습니다', '학생별 숙제를 추가하세요.')) + '</div></section></div>';
   }
 
   function renderConsultSchedule() {
@@ -2841,7 +2879,7 @@
     saveState();
     render();
   }
-  function addTeacher(form) { var data = new FormData(form); var name = String(data.get('name') || '').trim(); if (!name) return; var selectedStyle = normalizeAiTeacherStyle(data.get('aiStyle')); var songProfile = isSongGyumanTeacherName(name) || selectedStyle === 'song-gyuman'; state.teachers.push({ id: uid('teacher'), name: name, aiStyle: songProfile ? 'issue-action' : selectedStyle, aiStyleProfile: songProfile ? 'song-gyuman' : '', memo: String(data.get('memo') || '').trim() }); saveState(); render(); }
+  function addTeacher(form) { var data = new FormData(form); var name = String(data.get('name') || '').trim(); if (!name) return; var selectedStyle = normalizeAiTeacherStyle(data.get('aiStyle')); var styleProfile = namedAiTeacherStyleProfile(name) || (['song-gyuman', 'shin-yejin'].indexOf(selectedStyle) !== -1 ? selectedStyle : ''); var profileStyle = styleProfile ? aiTeacherStyle(styleProfile) : null; state.teachers.push({ id: uid('teacher'), name: name, aiStyle: profileStyle ? profileStyle.baseId : selectedStyle, aiStyleProfile: styleProfile, memo: String(data.get('memo') || '').trim() }); saveState(); render(); }
   function addHomeworkBatch(form) {
     var data = new FormData(form);
     var studentId = String(data.get('studentId') || '').trim();
@@ -3002,8 +3040,8 @@
     var target = event.target; var action = target.dataset.action; var studentRow = target.closest('[data-student-id]'); var teacherRow = target.closest('[data-teacher-id]'); var homeworkRow = target.closest('[data-homework-id]'); var consultRow = target.closest('[data-consult-id]'); var bookRow = target.closest('[data-book-id]'); var progressRow = target.closest('[data-assignment-id][data-unit]');
     if (action === 'update-student' && studentRow) { var student = getStudent(studentRow.dataset.studentId); if (!student) return; if (target.dataset.field === 'teacherId') setStudentTeacherIds(student, target.value ? [target.value.trim()] : []); else student[target.dataset.field] = target.value.trim(); saveState(); render(); }
     if (action === 'toggle-student-teacher' && studentRow) { var assignedStudent = getStudent(studentRow.dataset.studentId); if (!assignedStudent) return; var assignedTeacherIds = studentTeacherIds(assignedStudent); if (target.checked && assignedTeacherIds.indexOf(target.dataset.teacherId) === -1) assignedTeacherIds.push(target.dataset.teacherId); if (!target.checked) assignedTeacherIds = assignedTeacherIds.filter(function (id) { return id !== target.dataset.teacherId; }); setStudentTeacherIds(assignedStudent, assignedTeacherIds); saveState(); render(); }
-    if (action === 'update-teacher' && teacherRow) { var teacher = getTeacher(teacherRow.dataset.teacherId); if (!teacher) return; teacher[target.dataset.field] = target.value.trim(); if (target.dataset.field === 'name' && isSongGyumanTeacherName(teacher.name)) { teacher.aiStyle = 'issue-action'; teacher.aiStyleProfile = 'song-gyuman'; } saveState(); render(); }
-    if (action === 'update-teacher-style' && teacherRow) { var styleTeacher = getTeacher(teacherRow.dataset.teacherId); if (!styleTeacher) return; var selectedTeacherStyle = normalizeAiTeacherStyle(target.value); styleTeacher.aiStyleProfile = selectedTeacherStyle === 'song-gyuman' ? 'song-gyuman' : ''; styleTeacher.aiStyle = selectedTeacherStyle === 'song-gyuman' ? 'issue-action' : selectedTeacherStyle; saveState(); render(); }
+    if (action === 'update-teacher' && teacherRow) { var teacher = getTeacher(teacherRow.dataset.teacherId); if (!teacher) return; teacher[target.dataset.field] = target.value.trim(); if (target.dataset.field === 'name') { var detectedTeacherProfile = namedAiTeacherStyleProfile(teacher.name); if (detectedTeacherProfile) { var detectedTeacherStyle = aiTeacherStyle(detectedTeacherProfile); teacher.aiStyle = detectedTeacherStyle.baseId; teacher.aiStyleProfile = detectedTeacherProfile; } } saveState(); render(); }
+    if (action === 'update-teacher-style' && teacherRow) { var styleTeacher = getTeacher(teacherRow.dataset.teacherId); if (!styleTeacher) return; var selectedTeacherStyle = normalizeAiTeacherStyle(target.value); var selectedProfileStyle = ['song-gyuman', 'shin-yejin'].indexOf(selectedTeacherStyle) !== -1 ? aiTeacherStyle(selectedTeacherStyle) : null; styleTeacher.aiStyleProfile = selectedProfileStyle ? selectedTeacherStyle : ''; styleTeacher.aiStyle = selectedProfileStyle ? selectedProfileStyle.baseId : selectedTeacherStyle; saveState(); render(); }
     if (action === 'update-homework' && homeworkRow) { var homework = state.homework.find(function (item) { return item.id === homeworkRow.dataset.homeworkId; }); if (!homework) return; homework[target.dataset.field] = target.value.trim(); saveState(); render(); }
     if (action === 'update-homework-book' && homeworkRow) { var bookHomework = state.homework.find(function (item) { return item.id === homeworkRow.dataset.homeworkId; }); if (!bookHomework) return; applyHomeworkBookRange(bookHomework, target.value, 1, 1); saveState(); render(); }
     if (action === 'update-homework-start' && homeworkRow) { var startHomework = state.homework.find(function (item) { return item.id === homeworkRow.dataset.homeworkId; }); if (!startHomework) return; applyHomeworkBookRange(startHomework, startHomework.bookId, Number(target.value), startHomework.endUnit); saveState(); render(); }
@@ -3121,10 +3159,11 @@
         if (homeworkGroupContent) homeworkGroupContent.hidden = !willExpandHomeworkGroup;
         ui.homeworkExpandedStudentIds = ui.homeworkExpandedStudentIds.filter(function (id) { return id !== homeworkGroupStudentId; });
         if (willExpandHomeworkGroup) ui.homeworkExpandedStudentIds.push(homeworkGroupStudentId);
+        syncHomeworkGroupToggleButton();
       }
     }
-    if (target.id === 'expandAllHomeworkStudents' || target.id === 'collapseAllHomeworkStudents') {
-      var expandHomeworkGroups = target.id === 'expandAllHomeworkStudents';
+    if (target.id === 'toggleAllHomeworkStudents') {
+      var expandHomeworkGroups = target.dataset.nextState === 'expand';
       ui.homeworkExpandedStudentIds = [];
       Array.prototype.forEach.call(document.querySelectorAll('[data-homework-student-group]'), function (group) {
         var studentId = group.dataset.homeworkStudentGroup;
@@ -3134,6 +3173,7 @@
         if (content) content.hidden = !expandHomeworkGroups;
         if (expandHomeworkGroups) ui.homeworkExpandedStudentIds.push(studentId);
       });
+      syncHomeworkGroupToggleButton();
     }
     if (action === 'select-quick-student') { ui.quickStudentId = target.dataset.studentId; ui.quickStudentQuery = ''; ui.quickBookId = 'all'; renderQuick(); }
     if (action === 'quick-previous-student' || action === 'quick-next-student') {
