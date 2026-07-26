@@ -212,6 +212,7 @@
   }
 
   function saveState(options) {
+    sortStateDirectories();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     if (!(options && options.skipSync)) scheduleAutoSync();
   }
@@ -470,6 +471,22 @@
   }
   function uid(prefix) { return prefix + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8); }
   function escapeHtml(value) { return String(value == null ? '' : value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;'); }
+  var NAME_COLLATOR = typeof Intl !== 'undefined' && Intl.Collator ? new Intl.Collator('ko-KR', { numeric: true, sensitivity: 'base' }) : null;
+  function compareNamedItems(left, right) {
+    var leftName = String(left && left.name || '').trim();
+    var rightName = String(right && right.name || '').trim();
+    var result = NAME_COLLATOR ? NAME_COLLATOR.compare(leftName, rightName) : leftName.toLowerCase().localeCompare(rightName.toLowerCase());
+    if (result) return result;
+    return String(left && left.id || '').localeCompare(String(right && right.id || ''));
+  }
+  function sortedNamedItems(items) { return (items || []).slice().sort(compareNamedItems); }
+  function sortedBooks() { return sortedNamedItems(state.books); }
+  function sortStateDirectories() {
+    if (!state) return;
+    state.students = sortedNamedItems(state.students);
+    state.books = sortedNamedItems(state.books);
+  }
+  sortStateDirectories();
   function clampUnitCount(value) { var parsed = parseInt(value, 10); if (Number.isNaN(parsed)) return 0; return Math.max(0, Math.min(80, parsed)); }
   function normalizeBookSubject(subjectId) {
     return BOOK_SUBJECTS.some(function (subject) { return subject.id === subjectId; }) ? subjectId : 'unclassified';
@@ -628,7 +645,7 @@
   }
 
   function studentsByTeacher(teacherId) {
-    return state.students.filter(function (student) { return teacherMatches(student, teacherId || 'all'); });
+    return sortedNamedItems(state.students.filter(function (student) { return teacherMatches(student, teacherId || 'all'); }));
   }
 
   var HANGUL_INITIALS = ['ㄱ', 'ㄲ', 'ㄴ', 'ㄷ', 'ㄸ', 'ㄹ', 'ㅁ', 'ㅂ', 'ㅃ', 'ㅅ', 'ㅆ', 'ㅇ', 'ㅈ', 'ㅉ', 'ㅊ', 'ㅋ', 'ㅌ', 'ㅍ', 'ㅎ'];
@@ -687,7 +704,7 @@
     return all + students.map(function (s) { return '<option value="' + s.id + '" ' + (selectedId === s.id ? 'selected' : '') + '>' + escapeHtml(s.name) + '</option>'; }).join('');
   }
 
-  function bookOptions(selectedId, includeAll) { var all = includeAll ? '<option value="all">전체 책</option>' : ''; return all + state.books.map(function (b) { return '<option value="' + b.id + '" ' + (selectedId === b.id ? 'selected' : '') + '>' + escapeHtml(b.name) + '</option>'; }).join(''); }
+  function bookOptions(selectedId, includeAll) { var all = includeAll ? '<option value="all">전체 책</option>' : ''; return all + sortedBooks().map(function (b) { return '<option value="' + b.id + '" ' + (selectedId === b.id ? 'selected' : '') + '>' + escapeHtml(b.name) + '</option>'; }).join(''); }
 
   var CONSULT_WEEKDAYS = [
     { value: 1, label: '월' },
@@ -818,7 +835,9 @@
   }
 
   function activeAssignmentsByTeacher(teacherId) {
-    return activeAssignments().filter(function (assignment) { return teacherMatches(getStudent(assignment.studentId), teacherId || 'all'); });
+    return activeAssignments().filter(function (assignment) { return teacherMatches(getStudent(assignment.studentId), teacherId || 'all'); }).sort(function (left, right) {
+      return compareNamedItems(getStudent(left.studentId), getStudent(right.studentId)) || compareNamedItems(getBook(left.bookId), getBook(right.bookId));
+    });
   }
 
   function assignmentTotals(assignment) {
@@ -1659,7 +1678,7 @@
   }
 
   function assignedBooksForStudent(studentId) {
-    return studentAssignments(studentId).map(function (assignment) { return getBook(assignment.bookId); }).filter(Boolean);
+    return sortedNamedItems(studentAssignments(studentId).map(function (assignment) { return getBook(assignment.bookId); }).filter(Boolean));
   }
 
   function homeworkUnitLabel(book, unitNumber) {
@@ -2309,7 +2328,7 @@
 
   function renderBooks() {
     if (ui.editingBookId && !getBook(ui.editingBookId)) ui.editingBookId = null;
-    var visibleBooks = state.books.filter(function (book) { return ui.bookSubjectId === 'all' || normalizeBookSubject(book.subject) === ui.bookSubjectId; });
+    var visibleBooks = sortedBooks().filter(function (book) { return ui.bookSubjectId === 'all' || normalizeBookSubject(book.subject) === ui.bookSubjectId; });
     var rows = visibleBooks.map(function (book) {
       normalizeBookUnits(book);
       var namedCount = book.unitNames.filter(function (name) { return Boolean(name); }).length;
@@ -2340,7 +2359,7 @@
       var count = activeAssignments().filter(function (a) { return a.studentId === student.id; }).length;
       return '<button class="student-pill ' + (student.id === ui.selectedStudentId ? 'active' : '') + '" data-action="select-assignment-student" data-student-id="' + student.id + '" ' + (studentMatchesSearch(student, ui.assignmentStudentQuery) ? '' : 'hidden') + '><span>' + escapeHtml(student.name) + '</span><strong>' + count + '</strong></button>';
     }).join('');
-    var visibleBooks = state.books.filter(function (book) { return ui.assignmentBookSubjectId === 'all' || normalizeBookSubject(book.subject) === ui.assignmentBookSubjectId; });
+    var visibleBooks = sortedBooks().filter(function (book) { return ui.assignmentBookSubjectId === 'all' || normalizeBookSubject(book.subject) === ui.assignmentBookSubjectId; });
     var checks = selectedStudent ? visibleBooks.map(function (book) {
       var assignment = getAssignment(selectedStudent.id, book.id);
       var checked = assignment && assignment.active;
