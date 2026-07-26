@@ -251,9 +251,18 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
 .status-badge.done { background: var(--green-soft); color: #166534; }
 .status-badge.todo { background: var(--orange-soft); color: #9a3412; }
 .status-badge.partial { background: var(--blue-soft); color: var(--blue-strong); }
-.quick-table { min-width: 980px; }
+.quick-controls { display: grid; grid-template-columns: minmax(170px, .7fr) minmax(260px, 1.25fr) minmax(180px, .8fr); gap: 12px; align-items: start; }
+.quick-student-picker { min-width: 0; }
+.quick-current-student { display: grid; grid-template-columns: 34px minmax(0, 1fr) 34px; gap: 7px; align-items: center; min-height: 38px; margin-top: 7px; }
+.quick-current-student strong { overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.quick-current-student .icon-button { width: 34px; height: 34px; min-height: 34px; font-size: 22px; }
+.quick-student-results { display: flex; flex-wrap: wrap; gap: 6px; max-height: 126px; margin-top: 7px; padding: 7px; overflow-y: auto; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }
+.quick-student-result { min-height: 32px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--text); font-weight: 800; }
+.quick-student-result:hover, .quick-student-result.selected { border-color: var(--blue); background: var(--blue-soft); color: var(--blue-strong); }
+.quick-student-empty { padding: 4px; color: var(--muted); font-size: 12px; }
+.quick-table { min-width: 720px; }
 .quick-table th, .quick-table td { text-align: center; padding: 7px; }
-.quick-table th:first-child, .quick-table td:first-child, .quick-table th:nth-child(2), .quick-table td:nth-child(2) { text-align: left; }
+.quick-table th:first-child, .quick-table td:first-child { min-width: 180px; text-align: left; }
 .quick-unit-cell { min-width: 88px; }
 .quick-unit-check { display: grid; justify-items: center; gap: 4px; color: var(--muted); font-size: 10px; line-height: 1.25; }
 .quick-unit-check span { width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -343,7 +352,7 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--blue); }
 .empty-state.compact { padding: 16px; font-size: 12px; }
 .stacked-field { display: grid; gap: 6px; color: var(--muted); font-size: 13px; font-weight: 700; }
 @media (max-width: 1000px) {
-  .summary-grid, .dashboard-focus-grid, .two-column, .assignment-layout, .filters, .ai-layout, .detail-grid, .filter-row, .progress-primary-filters, .consult-generator, .evaluation-search { grid-template-columns: 1fr; }
+  .summary-grid, .dashboard-focus-grid, .two-column, .assignment-layout, .filters, .ai-layout, .detail-grid, .filter-row, .progress-primary-filters, .consult-generator, .evaluation-search, .quick-controls { grid-template-columns: 1fr; }
   .form-grid, .form-grid.students, .form-grid.student-form, .form-grid.teachers, .form-grid.books, .homework-form { grid-template-columns: 1fr; }
   .student-search-tools { grid-template-columns: minmax(0, 1fr); width: 100%; }
   .homework-batch-shared { grid-template-columns: 1fr; }

@@ -62,8 +62,9 @@
     homeworkBatchStatus: 'todo',
     homeworkBatchNotice: '',
     quickTeacherId: 'all',
+    quickStudentId: null,
+    quickStudentQuery: '',
     quickBookId: 'all',
-    showQuickFilters: false,
     aiTeacherId: 'all',
     aiStudentId: null,
     aiWritingTeacherId: null,
@@ -2591,13 +2592,34 @@
   }
 
   function renderQuick() {
-    var assignments = activeAssignmentsByTeacher(ui.quickTeacherId).filter(function (a) { return ui.quickBookId === 'all' || a.bookId === ui.quickBookId; });
+    var visibleStudents = studentsByTeacher(ui.quickTeacherId);
+    if (!visibleStudents.some(function (student) { return student.id === ui.quickStudentId; })) {
+      ui.quickStudentId = visibleStudents[0] ? visibleStudents[0].id : null;
+      ui.quickBookId = 'all';
+    }
+    var selectedStudent = getStudent(ui.quickStudentId);
+    var studentAssignments = activeAssignmentsByTeacher(ui.quickTeacherId).filter(function (assignment) {
+      return assignment.studentId === ui.quickStudentId && getBook(assignment.bookId);
+    });
+    if (ui.quickBookId !== 'all' && !studentAssignments.some(function (assignment) { return assignment.bookId === ui.quickBookId; })) ui.quickBookId = 'all';
+    var assignments = studentAssignments.filter(function (assignment) { return ui.quickBookId === 'all' || assignment.bookId === ui.quickBookId; });
+    var quickSearchQuery = compactStudentSearchText(ui.quickStudentQuery);
+    var quickSearchMatches = visibleStudents.filter(function (student) { return quickSearchQuery && studentMatchesSearch(student, ui.quickStudentQuery); });
+    var quickStudentButtons = visibleStudents.map(function (student) {
+      var visible = quickSearchQuery && quickSearchMatches.slice(0, 12).some(function (match) { return match.id === student.id; });
+      return '<button type="button" class="quick-student-result ' + (student.id === ui.quickStudentId ? 'selected' : '') + '" data-action="select-quick-student" data-student-id="' + student.id + '" ' + (visible ? '' : 'hidden') + '>' + escapeHtml(student.name) + '</button>';
+    }).join('');
+    var selectedStudentIndex = visibleStudents.findIndex(function (student) { return student.id === ui.quickStudentId; });
+    var quickBookChoices = '<option value="all">전체 책</option>' + studentAssignments.map(function (assignment) {
+      var book = getBook(assignment.bookId);
+      return '<option value="' + book.id + '" ' + (book.id === ui.quickBookId ? 'selected' : '') + '>' + escapeHtml(book.name) + '</option>';
+    }).join('');
     var maxUnits = Math.max.apply(null, [0].concat(assignments.map(function (a) { var book = getBook(a.bookId); return book ? book.unitCount : 0; })));
     var cappedUnits = Math.min(maxUnits, 40);
     var headers = [];
     for (var i = 1; i <= cappedUnits; i += 1) headers.push('<th>' + i + '</th>');
     var rows = assignments.map(function (assignment) {
-      var student = getStudent(assignment.studentId); var book = getBook(assignment.bookId); var totals = assignmentTotals(assignment); var cells = [];
+      var book = getBook(assignment.bookId); var totals = assignmentTotals(assignment); var cells = [];
       for (var unit = 1; unit <= cappedUnits; unit += 1) {
         if (unit > book.unitCount) cells.push('<td></td>');
         else {
@@ -2605,10 +2627,11 @@
           cells.push('<td class="quick-unit-cell"><label class="quick-unit-check" title="' + escapeHtml(unitName) + '"><input type="checkbox" data-action="quick-toggle" data-assignment-id="' + assignment.id + '" data-unit="' + unit + '" aria-label="' + escapeHtml(book.name + ' ' + unitName) + '" ' + (getRecord(assignment.id, unit).done ? 'checked' : '') + '><span>' + escapeHtml(unitName) + '</span></label></td>');
         }
       }
-      return '<tr><td>' + escapeHtml(teacherNamesForStudent(student)) + '</td><td>' + escapeHtml(student.name) + '</td><td>' + escapeHtml(book.name) + '</td>' + cells.join('') + '<td class="numeric">' + totals.done + '/' + totals.total + '</td><td class="numeric">' + totals.rate + '%</td></tr>';
+      return '<tr><td>' + escapeHtml(book.name) + '</td>' + cells.join('') + '<td class="numeric">' + totals.done + '/' + totals.total + '</td><td class="numeric">' + totals.rate + '%</td></tr>';
     }).join('');
-    var advanced = ui.showQuickFilters ? '<div class="advanced-filters"><select class="select" id="quickBookFilter">' + bookOptions(ui.quickBookId, true) + '</select></div>' : '';
-    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>빠른 체크</h2><p>' + assignments.length + '건</p></div></div><section class="panel"><div class="panel-body"><div class="filter-row"><select class="select" id="quickTeacherFilter">' + teacherOptions(ui.quickTeacherId, true, true) + '</select><button class="secondary-button" id="toggleQuickFilters">필터</button></div>' + advanced + '</div><div class="table-wrap"><table class="quick-table"><thead><tr><th>선생님</th><th>학생</th><th>책</th>' + headers.join('') + '<th>완료</th><th>%</th></tr></thead><tbody>' + (rows || '<tr><td colspan="' + (cappedUnits + 5) + '">' + emptyState('빠르게 체크할 책이 없습니다', '책 배정 화면에서 사용하는 책을 체크하세요.') + '</td></tr>') + '</tbody></table></div></section></div>';
+    var quickScopeText = selectedStudent ? selectedStudent.name + ' 학생 · 배정 책 ' + studentAssignments.length + '권' : '선택할 학생이 없습니다';
+    var quickStudentPicker = '<div class="stacked-field quick-student-picker"><span>학생 검색</span><input class="field student-search-input" id="quickStudentSearchInput" type="search" value="' + escapeHtml(ui.quickStudentQuery) + '" placeholder="이름 또는 초성 검색" autocomplete="off" aria-label="빠른 체크 학생 검색"><div class="quick-current-student"><button type="button" class="icon-button" data-action="quick-previous-student" title="이전 학생" aria-label="이전 학생" ' + (selectedStudentIndex <= 0 ? 'disabled' : '') + '>&#8249;</button><strong>' + escapeHtml(selectedStudent ? selectedStudent.name : '학생 없음') + '</strong><button type="button" class="icon-button" data-action="quick-next-student" title="다음 학생" aria-label="다음 학생" ' + (selectedStudentIndex < 0 || selectedStudentIndex >= visibleStudents.length - 1 ? 'disabled' : '') + '>&#8250;</button></div><div class="quick-student-results" id="quickStudentSearchResults" ' + (quickSearchQuery ? '' : 'hidden') + '>' + quickStudentButtons + '<span class="quick-student-empty" id="quickStudentSearchEmpty" ' + (quickSearchMatches.length ? 'hidden' : '') + '>검색 결과가 없습니다.</span></div></div>';
+    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>빠른 체크</h2><p>' + escapeHtml(quickScopeText) + '</p></div></div><section class="panel"><div class="panel-body quick-controls"><label class="stacked-field"><span>선생님</span><select class="select" id="quickTeacherFilter">' + teacherOptions(ui.quickTeacherId, true, true) + '</select></label>' + quickStudentPicker + '<label class="stacked-field"><span>책</span><select class="select" id="quickBookFilter" ' + (studentAssignments.length ? '' : 'disabled') + '>' + quickBookChoices + '</select></label></div><div class="table-wrap"><table class="quick-table"><thead><tr><th>책</th>' + headers.join('') + '<th>완료</th><th>%</th></tr></thead><tbody>' + (rows || '<tr><td colspan="' + (cappedUnits + 3) + '">' + emptyState(selectedStudent ? '빠르게 체크할 책이 없습니다' : '학생을 선택할 수 없습니다', selectedStudent ? '책 배정 화면에서 이 학생이 사용하는 책을 체크하세요.' : '학생 화면에서 학생을 추가하거나 담당 선생님을 확인하세요.') + '</td></tr>') + '</tbody></table></div></section></div>';
   }
 
   function aiKeywordCategories() {
@@ -2849,6 +2872,7 @@
     Object.keys(state.progress).forEach(function (key) { if (assignmentIds.some(function (id) { return key.indexOf(id + ':') === 0; })) delete state.progress[key]; });
     if (ui.selectedStudentId === studentId) ui.selectedStudentId = state.students[0] ? state.students[0].id : null;
     if (ui.progressStudentId === studentId) { ui.progressStudentId = state.students[0] ? state.students[0].id : null; ui.progressBookId = null; ui.progressUnit = 'all'; ui.progressStatus = 'todo'; ui.progressQuery = ''; ui.progressVisibleLimit = 5; ui.progressRangeStart = 1; ui.progressRangeEnd = 1; ui.progressLastBulk = null; ui.expandedProgressKey = null; }
+    if (ui.quickStudentId === studentId) { ui.quickStudentId = firstStudentIdForTeacher(ui.quickTeacherId); ui.quickStudentQuery = ''; ui.quickBookId = 'all'; }
     if (ui.aiStudentId === studentId) ui.aiStudentId = state.students[0] ? state.students[0].id : null;
     saveState(); render();
   }
@@ -2959,7 +2983,7 @@
     if (target.id === 'progressHomeworkStartUnit') { ui.progressHomeworkStartUnit = Number(target.value || 1); if (ui.progressHomeworkEndUnit < ui.progressHomeworkStartUnit) { ui.progressHomeworkEndUnit = ui.progressHomeworkStartUnit; var progressHomeworkEnd = document.querySelector('#progressHomeworkEndUnit'); if (progressHomeworkEnd) progressHomeworkEnd.value = String(ui.progressHomeworkEndUnit); } setProgressHomeworkNotice(''); }
     if (target.id === 'progressHomeworkEndUnit') { ui.progressHomeworkEndUnit = Math.max(ui.progressHomeworkStartUnit, Number(target.value || ui.progressHomeworkStartUnit)); setProgressHomeworkNotice(''); }
     if (target.id === 'progressHomeworkDueDate') { ui.progressHomeworkDueDate = target.value; setProgressHomeworkNotice(''); }
-    if (target.id === 'quickTeacherFilter') { ui.quickTeacherId = target.value; render(); }
+    if (target.id === 'quickTeacherFilter') { ui.quickTeacherId = target.value; ui.quickStudentId = firstStudentIdForTeacher(ui.quickTeacherId); ui.quickStudentQuery = ''; ui.quickBookId = 'all'; render(); }
     if (target.id === 'quickBookFilter') { ui.quickBookId = target.value; render(); }
     if (target.id === 'aiTeacherFilter') { ui.aiTeacherId = target.value; ui.aiStudentId = firstStudentIdForTeacher(ui.aiTeacherId); ui.aiWritingTeacherId = null; ui.aiBatchFailures = []; setAiStatus(''); renderAiEvaluation(); }
     if (target.id === 'aiStudentSelect') { ui.aiStudentId = target.value; ui.aiWritingTeacherId = null; setAiStatus(''); renderAiEvaluation(); }
@@ -3015,8 +3039,15 @@
     if (target.id === 'undoLastProgressAction') undoLastProgressAction();
     if (target.id === 'completeProgressRange') completeProgressRange();
     if (target.id === 'undoProgressRange') undoProgressRange();
-    if (target.id === 'toggleQuickFilters') { ui.showQuickFilters = !ui.showQuickFilters; render(); }
     if (target.id === 'toggleHomeworkFilters') { ui.showHomeworkFilters = !ui.showHomeworkFilters; render(); }
+    if (action === 'select-quick-student') { ui.quickStudentId = target.dataset.studentId; ui.quickStudentQuery = ''; ui.quickBookId = 'all'; renderQuick(); }
+    if (action === 'quick-previous-student' || action === 'quick-next-student') {
+      var quickStudents = studentsByTeacher(ui.quickTeacherId);
+      var quickIndex = quickStudents.findIndex(function (student) { return student.id === ui.quickStudentId; });
+      var quickOffset = action === 'quick-previous-student' ? -1 : 1;
+      var quickTargetStudent = quickStudents[quickIndex + quickOffset];
+      if (quickTargetStudent) { ui.quickStudentId = quickTargetStudent.id; ui.quickStudentQuery = ''; ui.quickBookId = 'all'; renderQuick(); }
+    }
     if (action === 'select-homework-entry-type') { ui.homeworkEntryType = normalizeHomeworkType(target.dataset.homeworkType); ui.homeworkBatchNotice = ''; renderHomework(); }
     if (action === 'select-homework-form-student') { ui.homeworkFormStudentId = target.dataset.studentId; ui.homeworkStudentQuery = ''; ui.homeworkFormBookId = null; ui.homeworkFormStartUnit = 1; ui.homeworkFormEndUnit = 1; ui.homeworkBatchNotice = ''; renderHomework(); }
     if (target.id === 'toggleAllHomeworkBatch') { var batchChecks = Array.prototype.slice.call(document.querySelectorAll('#homeworkBatchForm [data-action="select-homework-batch-book"]')); var checkAll = batchChecks.some(function (checkbox) { return !checkbox.checked; }); batchChecks.forEach(function (checkbox) { checkbox.checked = checkAll; setHomeworkBatchRowEnabled(checkbox); }); ui.homeworkBatchNotice = ''; updateHomeworkBatchSelectedCount(); }
@@ -3030,10 +3061,24 @@
     if (target.id === 'clearAiKeywords') clearAiKeywords();
     if (action === 'delete-evaluation') deleteEvaluation(target.dataset.evaluationId);
     if (target.id === 'refreshEvaluationQueue') refreshTodayEvaluationQueues();
-    if (target.id === 'resetData') { if (!confirm('초기 상태로 되돌릴까요?')) return; state = seedState(); saveState(); ui.selectedStudentId = state.students[0] ? state.students[0].id : null; ui.progressStudentId = state.students[0] ? state.students[0].id : null; ui.progressBookId = null; ui.progressUnit = 'all'; ui.progressStatus = 'todo'; ui.progressQuery = ''; ui.progressVisibleLimit = 5; ui.progressRangeStart = 1; ui.progressRangeEnd = 1; ui.progressLastBulk = null; ui.expandedProgressKey = null; ui.aiStudentId = state.students[0] ? state.students[0].id : null; ui.aiWritingTeacherId = null; ui.aiDraft = ''; ui.aiKeywords = ''; render(); }
+    if (target.id === 'resetData') { if (!confirm('초기 상태로 되돌릴까요?')) return; state = seedState(); saveState(); ui.selectedStudentId = state.students[0] ? state.students[0].id : null; ui.progressStudentId = state.students[0] ? state.students[0].id : null; ui.progressBookId = null; ui.progressUnit = 'all'; ui.progressStatus = 'todo'; ui.progressQuery = ''; ui.progressVisibleLimit = 5; ui.progressRangeStart = 1; ui.progressRangeEnd = 1; ui.progressLastBulk = null; ui.expandedProgressKey = null; ui.quickStudentId = state.students[0] ? state.students[0].id : null; ui.quickStudentQuery = ''; ui.quickBookId = 'all'; ui.aiStudentId = state.students[0] ? state.students[0].id : null; ui.aiWritingTeacherId = null; ui.aiDraft = ''; ui.aiKeywords = ''; render(); }
   });
 
   document.addEventListener('input', function (event) {
+    if (event.target.id === 'quickStudentSearchInput') {
+      ui.quickStudentQuery = event.target.value;
+      var quickQuery = compactStudentSearchText(ui.quickStudentQuery);
+      var quickResultCount = 0;
+      Array.prototype.forEach.call(document.querySelectorAll('.quick-student-result[data-student-id]'), function (button) {
+        var matchesQuickStudent = quickQuery && studentMatchesSearch(getStudent(button.dataset.studentId), ui.quickStudentQuery) && quickResultCount < 12;
+        button.hidden = !matchesQuickStudent;
+        if (matchesQuickStudent) quickResultCount += 1;
+      });
+      var quickResults = document.querySelector('#quickStudentSearchResults');
+      if (quickResults) quickResults.hidden = !quickQuery;
+      var quickEmpty = document.querySelector('#quickStudentSearchEmpty');
+      if (quickEmpty) quickEmpty.hidden = !quickQuery || quickResultCount > 0;
+    }
     if (event.target.id === 'homeworkStudentSearchInput') {
       ui.homeworkStudentQuery = event.target.value;
       var homeworkQuery = compactStudentSearchText(ui.homeworkStudentQuery);
