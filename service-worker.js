@@ -1,9 +1,9 @@
-const CACHE_NAME = 'student-progress-mobile-v49';
+const CACHE_NAME = 'student-progress-mobile-v51';
 const APP_FILES = [
   './',
   './index.html',
-  './styles.css?v=49',
-  './app.js?v=49',
+  './styles.css?v=51',
+  './app.js?v=51',
   './manifest.webmanifest',
   './icon.svg'
 ];
