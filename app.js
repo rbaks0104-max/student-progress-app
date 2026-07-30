@@ -36,6 +36,8 @@
     alertsTeacherId: 'all',
     detailTeacherId: 'all',
     detailStudentId: null,
+    detailStudentQuery: '',
+    detailStudentSearchOpen: false,
     consultTeacherId: 'all',
     consultStartDate: '',
     consultWeeks: 4,
@@ -1774,6 +1776,10 @@
     return String(value || '').toLocaleLowerCase().replace(/[^0-9a-z가-힣]/g, '');
   }
 
+  function homeworkLookupTokens(value) {
+    return String(value || '').toLocaleLowerCase().match(/[0-9a-z]+|[가-힣]+/g) || [];
+  }
+
   function homeworkBulkStudentFromLine(line) {
     var candidate = String(line || '').replace(/\([^)]*\)\s*$/, '').replace(/\s*학생\s*$/, '').trim();
     var key = compactStudentSearchText(candidate);
@@ -1826,6 +1832,15 @@
     if (hintKey.indexOf(bookKey) === 0) return 95 + bookKey.length;
     if (bookKey.endsWith(hintKey) && hintKey.length >= 2) return 90 + hintKey.length;
     if (bookKey.indexOf(hintKey) !== -1 && hintKey.length >= 2) return 80 + hintKey.length;
+    var bookTokens = homeworkLookupTokens(book && book.name);
+    var hintTokens = homeworkLookupTokens(resourceHint);
+    var meaningfulTokens = hintTokens.filter(function (token) { return token.length >= 2; });
+    var tokensMatch = meaningfulTokens.length && hintTokens.every(function (token) {
+      return bookTokens.some(function (bookToken) {
+        return token.length >= 2 ? bookToken.indexOf(token) !== -1 : bookToken === token;
+      });
+    });
+    if (tokensMatch) return 70 + hintTokens.reduce(function (total, token) { return total + token.length; }, 0);
     return 0;
   }
 
@@ -1850,7 +1865,11 @@
       return right.score - left.score || compareNamedItems(left.book, right.book);
     });
     if (allRanked.length && (!allRanked[1] || allRanked[0].score !== allRanked[1].score)) {
-      return { book: allRanked[0].book, assigned: false, rangeText: split.rangeText, message: '학생에게 배정되지 않은 책입니다.' };
+      var unassignedRemainder = homeworkBookRemainder(line, allRanked[0].book.name);
+      return { book: allRanked[0].book, assigned: false, rangeText: unassignedRemainder == null ? split.rangeText : unassignedRemainder, message: '숙제 등록 시 이 책도 학생에게 자동 배정합니다.' };
+    }
+    if (allRanked.length > 1 && allRanked[0].score === allRanked[1].score) {
+      return { ambiguous: true, message: '입력한 제목 일부와 일치하는 책이 여러 권입니다: ' + allRanked.slice(0, 3).map(function (item) { return item.book.name; }).join(', ') };
     }
     return null;
   }
@@ -1894,7 +1913,6 @@
   function parseHomeworkBulkItem(student, sourceLine) {
     var bookMatch = findHomeworkBulkBook(student, sourceLine);
     if (bookMatch && bookMatch.ambiguous) return { student: student, sourceLine: sourceLine, valid: false, message: bookMatch.message };
-    if (bookMatch && !bookMatch.assigned) return { student: student, sourceLine: sourceLine, book: bookMatch.book, valid: false, message: bookMatch.message };
     if (bookMatch && bookMatch.book) {
       var range = parseHomeworkBulkBookRange(student, bookMatch.book, bookMatch.rangeText);
       return {
@@ -1908,7 +1926,8 @@
         startUnit: range.startUnit,
         endUnit: range.endUnit,
         title: range.valid ? homeworkRangeLabel(bookMatch.book, range.startUnit, range.endUnit) : '',
-        message: range.message || ''
+        autoAssign: !bookMatch.assigned,
+        message: range.message || (!bookMatch.assigned ? bookMatch.message : '')
       };
     }
     var direct = splitHomeworkBulkResourceLine(sourceLine);
@@ -2339,7 +2358,7 @@
       var bulkValidCount = bulkPreviewMatchesInput ? ui.homeworkTextBulkPreview.items.filter(function (item) { return item.valid; }).length : 0;
       entryMeta = '여러 학생 동시 등록';
       entryAction = '<span class="muted">학생별 자동 분석</span>';
-      entryBody = '<div class="panel-body homework-text-import"><label class="stacked-field"><span>학생·숙제 텍스트</span><textarea class="field homework-text-input" id="homeworkTextBulkInput" name="bulkText" placeholder="이재희&#10;수능완성 6 ~ 13&#10;&#10;장민근&#10;어댑터 - 11 ~ 17">' + escapeHtml(ui.homeworkTextBulkInput) + '</textarea></label>' + renderHomeworkBulkPreview(bulkPreviewMatchesInput ? ui.homeworkTextBulkPreview : null) + '</div>';
+      entryBody = '<div class="panel-body homework-text-import"><label class="stacked-field"><span>학생·숙제 텍스트</span><textarea class="field homework-text-input" id="homeworkTextBulkInput" name="bulkText" placeholder="이재희&#10;수능완성 1~5단원&#10;&#10;장민근&#10;어댑터 - 11~17단원">' + escapeHtml(ui.homeworkTextBulkInput) + '</textarea></label>' + renderHomeworkBulkPreview(bulkPreviewMatchesInput ? ui.homeworkTextBulkPreview : null) + '</div>';
       submitLabel = bulkPreviewMatchesInput ? '확인된 숙제 ' + bulkValidCount + '개 등록' : '내용 분석';
       if (!String(ui.homeworkTextBulkInput || '').trim() || (bulkPreviewMatchesInput && !bulkValidCount)) submitDisabled = 'disabled';
     }
@@ -2389,6 +2408,17 @@
   function renderStudentDetail() {
     ensureDetailStudentId();
     var student = getStudent(ui.detailStudentId);
+    var detailStudents = studentsByTeacher(ui.detailTeacherId);
+    var detailStudentSearchQuery = compactStudentSearchText(ui.detailStudentQuery);
+    var detailStudentMatches = detailStudents.filter(function (candidate) {
+      return detailStudentSearchQuery && studentMatchesSearch(candidate, ui.detailStudentQuery);
+    }).slice(0, 8);
+    var visibleDetailStudentIds = detailStudentMatches.map(function (candidate) { return candidate.id; });
+    var detailStudentSuggestions = detailStudents.map(function (candidate) {
+      var visible = visibleDetailStudentIds.indexOf(candidate.id) !== -1;
+      return '<button type="button" class="student-autocomplete-option" role="option" data-action="select-detail-student" data-student-id="' + candidate.id + '" ' + (visible ? '' : 'hidden') + '><strong>' + escapeHtml(candidate.name) + '</strong><small>' + escapeHtml(teacherNamesForStudent(candidate)) + '</small></button>';
+    }).join('');
+    var detailStudentPicker = '<div class="student-autocomplete detail-student-autocomplete"><input class="field student-search-input" id="detailStudentSearchInput" type="search" value="' + escapeHtml(ui.detailStudentQuery) + '" placeholder="학생 이름 또는 초성 검색" aria-label="학생 상세 이름 또는 초성 검색" aria-autocomplete="list" aria-controls="detailStudentAutocompleteList" aria-expanded="' + String(Boolean(detailStudentSearchQuery && ui.detailStudentSearchOpen)) + '" autocomplete="off"><div class="student-autocomplete-list" id="detailStudentAutocompleteList" role="listbox" ' + (detailStudentSearchQuery && ui.detailStudentSearchOpen ? '' : 'hidden') + '>' + detailStudentSuggestions + '<span class="student-autocomplete-empty" id="detailStudentAutocompleteEmpty" ' + (detailStudentMatches.length ? 'hidden' : '') + '>검색 결과가 없습니다.</span></div></div>';
     var summary = student ? studentTotals(student.id) : { books: 0, total: 0, done: 0 };
     var rate = percent(summary.done, summary.total);
     var bookRows = student ? studentAssignments(student.id).map(function (assignment) {
@@ -2414,7 +2444,7 @@
       var deleteButton = item.kind === 'consultation' ? '<button class="mini-button danger" data-action="delete-consultation" data-consultation-id="' + item.id + '" title="삭제" aria-label="삭제">×</button>' : '';
       return '<article class="timeline-item"><div class="evaluation-meta">' + escapeHtml(item.date || '') + ' · ' + escapeHtml(item.label) + '</div><p class="evaluation-content">' + escapeHtml(item.body).replaceAll('\n', '<br>') + '</p><div class="row-actions">' + deleteButton + '</div></article>';
     }).join('');
-    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>학생 상세</h2><p>' + (student ? escapeHtml(student.name) : '학생 없음') + '</p></div><div class="toolbar"><select class="select" id="detailTeacherFilter">' + teacherOptions(ui.detailTeacherId, true, true) + '</select><select class="select" id="detailStudentSelect">' + studentOptions(ui.detailStudentId, false, ui.detailTeacherId) + '</select></div></div>' + (student ? '<div class="detail-grid"><section class="panel"><div class="panel-head"><h3>기본 정보</h3></div><div class="table-wrap"><table><tbody><tr><th>학생</th><td>' + escapeHtml(student.name) + '</td></tr><tr><th>선생님</th><td>' + escapeHtml(teacherNamesForStudent(student)) + '</td></tr><tr><th>메모</th><td>' + escapeHtml(student.memo || '') + '</td></tr><tr><th>진도</th><td>' + summary.done + '/' + summary.total + ' · ' + rate + '%</td></tr></tbody></table></div></section><section class="panel"><div class="panel-head"><h3>책별 진도</h3></div><div class="table-wrap"><table><thead><tr><th>책</th><th class="numeric">완료/전체</th><th>진도</th><th class="numeric">%</th></tr></thead><tbody>' + (bookRows || '<tr><td colspan="4">' + emptyState('배정된 책이 없습니다', '책 배정 화면에서 사용하는 책을 체크하세요.') + '</td></tr>') + '</tbody></table></div></section></div>' + progressUnitPanels + '<section class="panel"><div class="panel-head"><h3>숙제</h3></div><div class="table-wrap"><table><thead><tr><th>숙제</th><th>기한</th><th>상태</th><th>메모</th></tr></thead><tbody>' + (homeworkRows || '<tr><td colspan="4">' + emptyState('숙제가 없습니다', '숙제 탭에서 추가하세요.') + '</td></tr>') + '</tbody></table></div></section><section class="panel"><div class="panel-head"><h3>상담/평가 이력</h3></div><div class="panel-body"><form class="form-grid students" id="consultationForm"><input type="hidden" name="studentId" value="' + student.id + '"><input class="field" type="date" name="date" value="' + todayString() + '"><select class="select" name="type"><option>상담 메모</option><option>학부모 연락</option><option>학습 관찰</option><option>수업 특이사항</option></select><input class="field" name="content" placeholder="상담 또는 관찰 내용을 입력" required><button class="primary-button" type="submit">추가</button></form></div><div class="panel-body timeline-list">' + (historyRows || emptyState('이력이 없습니다', '상담 메모를 추가하거나 AI 평가를 저장하세요.')) + '</div></section>' : emptyState('학생이 없습니다', '학생을 먼저 추가하세요.')) + '</div>';
+    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>학생 상세</h2><p>' + (student ? escapeHtml(student.name) : '학생 없음') + '</p></div><div class="student-search-tools detail-student-tools"><select class="select" id="detailTeacherFilter">' + teacherOptions(ui.detailTeacherId, true, true) + '</select>' + detailStudentPicker + '</div></div>' + (student ? '<div class="detail-grid"><section class="panel"><div class="panel-head"><h3>기본 정보</h3></div><div class="table-wrap"><table><tbody><tr><th>학생</th><td>' + escapeHtml(student.name) + '</td></tr><tr><th>선생님</th><td>' + escapeHtml(teacherNamesForStudent(student)) + '</td></tr><tr><th>메모</th><td>' + escapeHtml(student.memo || '') + '</td></tr><tr><th>진도</th><td>' + summary.done + '/' + summary.total + ' · ' + rate + '%</td></tr></tbody></table></div></section><section class="panel"><div class="panel-head"><h3>책별 진도</h3></div><div class="table-wrap"><table><thead><tr><th>책</th><th class="numeric">완료/전체</th><th>진도</th><th class="numeric">%</th></tr></thead><tbody>' + (bookRows || '<tr><td colspan="4">' + emptyState('배정된 책이 없습니다', '책 배정 화면에서 사용하는 책을 체크하세요.') + '</td></tr>') + '</tbody></table></div></section></div>' + progressUnitPanels + '<section class="panel"><div class="panel-head"><h3>숙제</h3></div><div class="table-wrap"><table><thead><tr><th>숙제</th><th>기한</th><th>상태</th><th>메모</th></tr></thead><tbody>' + (homeworkRows || '<tr><td colspan="4">' + emptyState('숙제가 없습니다', '숙제 탭에서 추가하세요.') + '</td></tr>') + '</tbody></table></div></section><section class="panel"><div class="panel-head"><h3>상담/평가 이력</h3></div><div class="panel-body"><form class="form-grid students" id="consultationForm"><input type="hidden" name="studentId" value="' + student.id + '"><input class="field" type="date" name="date" value="' + todayString() + '"><select class="select" name="type"><option>상담 메모</option><option>학부모 연락</option><option>학습 관찰</option><option>수업 특이사항</option></select><input class="field" name="content" placeholder="상담 또는 관찰 내용을 입력" required><button class="primary-button" type="submit">추가</button></form></div><div class="panel-body timeline-list">' + (historyRows || emptyState('이력이 없습니다', '상담 메모를 추가하거나 AI 평가를 저장하세요.')) + '</div></section>' : emptyState('학생이 없습니다', '학생을 먼저 추가하세요.')) + '</div>';
   }
 
   function renderDashboard() {
@@ -3129,6 +3159,7 @@
       if (!bulkItems.length) { alert('등록 가능한 숙제가 없습니다. 분석 결과의 확인 필요 항목을 수정하세요.'); return; }
       var registeredStudentIds = [];
       var registeredCount = 0;
+      var autoAssignedCount = 0;
       bulkItems.forEach(function (parsedItem) {
         var parsedStudent = getStudent(parsedItem.student.id);
         if (!parsedStudent) return;
@@ -3149,6 +3180,14 @@
         };
         if (parsedItem.homeworkType === 'book') {
           var parsedAssignment = getAssignment(parsedStudent.id, parsedItem.bookId);
+          if ((!parsedAssignment || !parsedAssignment.active) && parsedItem.autoAssign) {
+            if (parsedAssignment) parsedAssignment.active = true;
+            else {
+              parsedAssignment = { id: uid('asg'), studentId: parsedStudent.id, bookId: parsedItem.bookId, active: true };
+              state.assignments.push(parsedAssignment);
+            }
+            autoAssignedCount += 1;
+          }
           if (!parsedAssignment || !parsedAssignment.active) return;
           applyHomeworkBookRange(homeworkItem, parsedItem.bookId, parsedItem.startUnit, parsedItem.endUnit);
         }
@@ -3162,7 +3201,7 @@
       ui.homeworkEntryType = 'text';
       ui.homeworkTextBulkInput = '';
       ui.homeworkTextBulkPreview = null;
-      ui.homeworkBatchNotice = registeredStudentIds.length + '명에게 숙제 ' + registeredCount + '개를 등록했습니다.' + (ignoredCount ? ' 확인 필요 ' + ignoredCount + '개는 제외했습니다.' : '');
+      ui.homeworkBatchNotice = registeredStudentIds.length + '명에게 숙제 ' + registeredCount + '개를 등록했습니다.' + (autoAssignedCount ? ' 책 ' + autoAssignedCount + '권도 자동 배정했습니다.' : '') + (ignoredCount ? ' 확인 필요 ' + ignoredCount + '개는 제외했습니다.' : '');
       saveState();
       renderHomework();
       return;
@@ -3343,8 +3382,7 @@
     if (target.id === 'dashboardTeacherFilter') { ui.dashboardTeacherId = target.value; render(); }
     if (target.id === 'studentTeacherFilter') { ui.studentTeacherId = target.value; render(); }
     if (target.id === 'assignmentTeacherFilter') { ui.assignmentTeacherId = target.value; render(); }
-    if (target.id === 'detailTeacherFilter') { ui.detailTeacherId = target.value; ui.detailStudentId = firstStudentIdForTeacher(ui.detailTeacherId); render(); }
-    if (target.id === 'detailStudentSelect') { ui.detailStudentId = target.value; render(); }
+    if (target.id === 'detailTeacherFilter') { ui.detailTeacherId = target.value; ui.detailStudentId = firstStudentIdForTeacher(ui.detailTeacherId); ui.detailStudentQuery = ''; ui.detailStudentSearchOpen = false; render(); }
     if (target.id === 'homeworkTeacherFilter') { ui.homeworkTeacherId = target.value; ui.homeworkStudentId = 'all'; ui.homeworkFormStudentId = null; ui.homeworkStudentQuery = ''; ui.homeworkFormBookId = null; render(); }
     if (target.id === 'homeworkStudentFilter') { ui.homeworkStudentId = target.value; render(); }
     if (target.id === 'homeworkBookFilter') { ui.homeworkBookId = target.value; render(); }
@@ -3397,14 +3435,20 @@
   document.addEventListener('click', function (event) {
     if (!event.target.closest('.student-autocomplete')) {
       ui.studentSearchOpen = false;
+      ui.detailStudentSearchOpen = false;
       var studentAutocompleteList = document.querySelector('#studentAutocompleteList');
       var studentAutocompleteInput = document.querySelector('#studentSearchInput');
       if (studentAutocompleteList) studentAutocompleteList.hidden = true;
       if (studentAutocompleteInput) studentAutocompleteInput.setAttribute('aria-expanded', 'false');
+      var detailStudentAutocompleteList = document.querySelector('#detailStudentAutocompleteList');
+      var detailStudentAutocompleteInput = document.querySelector('#detailStudentSearchInput');
+      if (detailStudentAutocompleteList) detailStudentAutocompleteList.hidden = true;
+      if (detailStudentAutocompleteInput) detailStudentAutocompleteInput.setAttribute('aria-expanded', 'false');
     }
     var target = event.target.closest('button'); if (!target) return; var action = target.dataset.action;
-    if (action === 'open-sidebar-student') { ui.detailStudentId = target.dataset.studentId; var sidebarStudent = getStudent(ui.detailStudentId); ui.detailTeacherId = firstTeacherIdForStudent(sidebarStudent) || 'all'; ui.sidebarStudentQuery = ''; ui.activeTab = 'detail'; render(); }
+    if (action === 'open-sidebar-student') { ui.detailStudentId = target.dataset.studentId; var sidebarStudent = getStudent(ui.detailStudentId); ui.detailTeacherId = firstTeacherIdForStudent(sidebarStudent) || 'all'; ui.detailStudentQuery = ''; ui.detailStudentSearchOpen = false; ui.sidebarStudentQuery = ''; ui.activeTab = 'detail'; render(); }
     if (action === 'select-student-search-result') { var searchedStudent = getStudent(target.dataset.studentId); if (searchedStudent) { ui.studentQuery = searchedStudent.name; ui.studentSearchOpen = false; renderStudents(); } }
+    if (action === 'select-detail-student') { var detailStudent = getStudent(target.dataset.studentId); if (detailStudent) { ui.detailStudentId = detailStudent.id; ui.detailStudentQuery = ''; ui.detailStudentSearchOpen = false; renderStudentDetail(); } }
     if (action === 'delete-student') deleteStudent(target.closest('[data-student-id]').dataset.studentId);
     if (action === 'delete-teacher') deleteTeacher(target.closest('[data-teacher-id]').dataset.teacherId);
     if (action === 'delete-book') deleteBook(target.closest('[data-book-id]').dataset.bookId);
@@ -3414,7 +3458,7 @@
     if (action === 'select-book-subject') { ui.bookSubjectId = target.dataset.subjectId || 'all'; ui.editingBookId = null; ui.bookSearchQuery = ''; ui.bookSearchStatus = ''; ui.bookSearchError = false; ui.bookSearchResults = []; renderBooks(); }
     if (action === 'select-assignment-book-subject') { ui.assignmentBookSubjectId = target.dataset.subjectId || 'all'; renderAssignments(); }
     if (action === 'select-assignment-student') { ui.selectedStudentId = target.dataset.studentId; render(); }
-    if (action === 'open-detail-student') { ui.detailStudentId = target.dataset.studentId; var studentForDetail = getStudent(ui.detailStudentId); ui.detailTeacherId = firstTeacherIdForStudent(studentForDetail) || 'all'; ui.activeTab = 'detail'; render(); }
+    if (action === 'open-detail-student') { ui.detailStudentId = target.dataset.studentId; var studentForDetail = getStudent(ui.detailStudentId); ui.detailTeacherId = firstTeacherIdForStudent(studentForDetail) || 'all'; ui.detailStudentQuery = ''; ui.detailStudentSearchOpen = false; ui.activeTab = 'detail'; render(); }
     if (action === 'open-dashboard-homework') { ui.homeworkTeacherId = ui.dashboardTeacherId; ui.homeworkStudentId = target.dataset.studentId; ui.homeworkBookId = 'all'; ui.homeworkStatus = 'all'; ui.showHomeworkFilters = true; ui.homeworkFormStudentId = target.dataset.studentId; ui.homeworkFormBookId = null; ui.activeTab = 'homework'; render(); }
     if (action === 'open-dashboard-progress') { ui.progressStudentId = target.dataset.studentId; ui.progressBookId = target.dataset.bookId || null; ui.progressUnit = 'all'; ui.progressView = 'check'; ui.progressStatus = 'todo'; ui.progressQuery = ''; ui.progressVisibleLimit = 5; ui.progressRangeStart = 1; ui.progressRangeEnd = 1; ui.progressLastBulk = null; ui.expandedProgressKey = null; ui.activeTab = 'progress'; render(); }
     if (target.id === 'dataExportJson') exportJson();
@@ -3561,6 +3605,22 @@
       var studentAutocompleteEmpty = document.querySelector('#studentAutocompleteEmpty');
       if (studentAutocompleteEmpty) studentAutocompleteEmpty.hidden = !studentAutocompleteQuery || studentAutocompleteCount > 0;
       event.target.setAttribute('aria-expanded', String(Boolean(studentAutocompleteQuery)));
+    }
+    if (event.target.id === 'detailStudentSearchInput') {
+      ui.detailStudentQuery = event.target.value;
+      var detailStudentQuery = compactStudentSearchText(ui.detailStudentQuery);
+      ui.detailStudentSearchOpen = Boolean(detailStudentQuery);
+      var detailStudentResultCount = 0;
+      Array.prototype.forEach.call(document.querySelectorAll('#detailStudentAutocompleteList .student-autocomplete-option[data-student-id]'), function (button) {
+        var matchesDetailStudent = detailStudentQuery && studentMatchesSearch(getStudent(button.dataset.studentId), ui.detailStudentQuery) && detailStudentResultCount < 8;
+        button.hidden = !matchesDetailStudent;
+        if (matchesDetailStudent) detailStudentResultCount += 1;
+      });
+      var detailStudentAutocompleteList = document.querySelector('#detailStudentAutocompleteList');
+      if (detailStudentAutocompleteList) detailStudentAutocompleteList.hidden = !detailStudentQuery;
+      var detailStudentAutocompleteEmpty = document.querySelector('#detailStudentAutocompleteEmpty');
+      if (detailStudentAutocompleteEmpty) detailStudentAutocompleteEmpty.hidden = !detailStudentQuery || detailStudentResultCount > 0;
+      event.target.setAttribute('aria-expanded', String(Boolean(detailStudentQuery)));
     }
     if (event.target.id === 'assignmentStudentSearchInput') {
       ui.assignmentStudentQuery = event.target.value;
