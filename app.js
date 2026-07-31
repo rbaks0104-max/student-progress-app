@@ -490,8 +490,12 @@
       saveState({ skipSync: true });
       syncConfig.lastSync = new Date().toISOString();
       saveSyncConfig();
-      ui.selectedStudentId = state.students[0] ? state.students[0].id : null;
-      ui.aiStudentId = state.students[0] ? state.students[0].id : null;
+      ui.selectedStudentId = null;
+      ui.detailStudentId = null;
+      ui.homeworkFormStudentId = null;
+      ui.progressStudentId = null;
+      ui.quickStudentId = null;
+      ui.aiStudentId = null;
       setSyncStatus('불러오기 완료 ' + new Date().toLocaleTimeString());
       render();
       return true;
@@ -778,8 +782,10 @@
 
   function studentOptions(selectedId, includeAll, teacherId) {
     var students = studentsByTeacher(teacherId || 'all');
-    var all = includeAll ? '<option value="all">전체 학생</option>' : '';
-    return all + students.map(function (s) { return '<option value="' + s.id + '" ' + (selectedId === s.id ? 'selected' : '') + '>' + escapeHtml(s.name) + '</option>'; }).join('');
+    var first = includeAll
+      ? '<option value="all" ' + (selectedId === 'all' ? 'selected' : '') + '>전체 학생</option>'
+      : '<option value="" ' + (!selectedId ? 'selected' : '') + ' disabled>학생 선택</option>';
+    return first + students.map(function (s) { return '<option value="' + s.id + '" ' + (selectedId === s.id ? 'selected' : '') + '>' + escapeHtml(s.name) + '</option>'; }).join('');
   }
 
   function bookOptions(selectedId, includeAll) { var all = includeAll ? '<option value="all">전체 책</option>' : ''; return all + sortedBooks().map(function (b) { return '<option value="' + b.id + '" ' + (selectedId === b.id ? 'selected' : '') + '>' + escapeHtml(b.name) + '</option>'; }).join(''); }
@@ -946,7 +952,7 @@
 
   function ensureAiStudentId() {
     if (ui.aiStudentId && getStudent(ui.aiStudentId) && teacherMatches(getStudent(ui.aiStudentId), ui.aiTeacherId)) return ui.aiStudentId;
-    ui.aiStudentId = firstStudentIdForTeacher(ui.aiTeacherId);
+    ui.aiStudentId = null;
     return ui.aiStudentId;
   }
 
@@ -2441,7 +2447,7 @@
 
   function ensureHomeworkFormSelection() {
     var students = studentsByTeacher(ui.homeworkTeacherId);
-    if (!students.some(function (student) { return student.id === ui.homeworkFormStudentId; })) ui.homeworkFormStudentId = students[0] ? students[0].id : null;
+    if (!students.some(function (student) { return student.id === ui.homeworkFormStudentId; })) ui.homeworkFormStudentId = null;
     var books = assignedBooksForStudent(ui.homeworkFormStudentId);
     if (!ui.homeworkBatchDueDate) ui.homeworkBatchDueDate = todayString();
     return { student: getStudent(ui.homeworkFormStudentId), books: books };
@@ -2525,7 +2531,7 @@
 
   function ensureDetailStudentId() {
     if (ui.detailStudentId && getStudent(ui.detailStudentId) && teacherMatches(getStudent(ui.detailStudentId), ui.detailTeacherId)) return ui.detailStudentId;
-    ui.detailStudentId = firstStudentIdForTeacher(ui.detailTeacherId);
+    ui.detailStudentId = null;
     return ui.detailStudentId;
   }
 
@@ -2803,7 +2809,7 @@
       return '<button type="button" class="homework-student-result ' + (student.id === ui.homeworkFormStudentId ? 'selected' : '') + '" data-action="select-homework-form-student" data-student-id="' + student.id + '" ' + (visible ? '' : 'hidden') + '>' + escapeHtml(student.name) + '</button>';
     }).join('');
     var selectedHomeworkStudent = getStudent(ui.homeworkFormStudentId);
-    var homeworkStudentPicker = '<div class="stacked-field homework-student-picker"><span>학생</span><input class="field student-search-input" id="homeworkStudentSearchInput" type="search" value="' + escapeHtml(ui.homeworkStudentQuery) + '" placeholder="이름 또는 초성 검색" autocomplete="off" aria-label="숙제 등록 학생 검색"><input type="hidden" name="studentId" value="' + escapeHtml(ui.homeworkFormStudentId || '') + '"><div class="homework-current-student"><span>선택</span><strong>' + escapeHtml(selectedHomeworkStudent ? selectedHomeworkStudent.name : '학생 없음') + '</strong></div><div class="homework-student-results" id="homeworkStudentSearchResults" ' + (homeworkStudentSearchQuery ? '' : 'hidden') + '>' + homeworkStudentButtons + '<span class="homework-student-empty" id="homeworkStudentSearchEmpty" ' + (homeworkStudentMatches.length ? 'hidden' : '') + '>검색 결과가 없습니다.</span></div></div>';
+    var homeworkStudentPicker = '<div class="stacked-field homework-student-picker"><span>학생</span><input class="field student-search-input" id="homeworkStudentSearchInput" type="search" value="' + escapeHtml(ui.homeworkStudentQuery) + '" placeholder="이름 또는 초성 검색" autocomplete="off" aria-label="숙제 등록 학생 검색"><input type="hidden" name="studentId" value="' + escapeHtml(ui.homeworkFormStudentId || '') + '"><div class="homework-current-student"><span>선택</span><strong>' + escapeHtml(selectedHomeworkStudent ? selectedHomeworkStudent.name : '선택 없음') + '</strong></div><div class="homework-student-results" id="homeworkStudentSearchResults" ' + (homeworkStudentSearchQuery ? '' : 'hidden') + '>' + homeworkStudentButtons + '<span class="homework-student-empty" id="homeworkStudentSearchEmpty" ' + (homeworkStudentMatches.length ? 'hidden' : '') + '>검색 결과가 없습니다.</span></div></div>';
     var homeworkScheduleFields = '<label class="stacked-field"><span>기한</span><input class="field" id="homeworkBatchDueDate" name="dueDate" type="date" value="' + escapeHtml(ui.homeworkBatchDueDate) + '"></label><label class="stacked-field"><span>상태</span><select class="select" id="homeworkBatchStatus" name="status">' + homeworkStatusOptions(ui.homeworkBatchStatus) + '</select></label>';
     var homeworkSharedFields = '<div class="panel-body homework-batch-shared ' + (entryType === 'text' ? 'text-import' : '') + '">' + (entryType === 'text' ? '' : homeworkStudentPicker) + homeworkScheduleFields + '</div>';
     var batchNotice = ui.homeworkBatchNotice ? '<p class="homework-batch-notice">' + escapeHtml(ui.homeworkBatchNotice) + '</p>' : '<span></span>';
@@ -2878,7 +2884,7 @@
       var deleteButton = item.kind === 'consultation' ? '<button class="mini-button danger" data-action="delete-consultation" data-consultation-id="' + item.id + '" title="삭제" aria-label="삭제">×</button>' : '';
       return '<article class="timeline-item"><div class="evaluation-meta">' + escapeHtml(item.date || '') + ' · ' + escapeHtml(item.label) + '</div><p class="evaluation-content">' + escapeHtml(item.body).replaceAll('\n', '<br>') + '</p><div class="row-actions">' + deleteButton + '</div></article>';
     }).join('');
-    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>학생 상세</h2><p>' + (student ? escapeHtml(student.name) : '학생 없음') + '</p></div><div class="student-search-tools detail-student-tools"><select class="select" id="detailTeacherFilter">' + teacherOptions(ui.detailTeacherId, true, true) + '</select>' + detailStudentPicker + '</div></div>' + (student ? '<div class="detail-grid"><section class="panel"><div class="panel-head"><h3>기본 정보</h3></div><div class="table-wrap"><table><tbody><tr><th>학생</th><td>' + escapeHtml(student.name) + '</td></tr><tr><th>선생님</th><td>' + escapeHtml(teacherNamesForStudent(student)) + '</td></tr><tr><th>메모</th><td>' + escapeHtml(student.memo || '') + '</td></tr><tr><th>진도</th><td>' + summary.done + '/' + summary.total + ' · ' + rate + '%</td></tr></tbody></table></div></section><section class="panel"><div class="panel-head"><h3>책별 진도</h3></div><div class="table-wrap"><table><thead><tr><th>책</th><th class="numeric">완료/전체</th><th>진도</th><th class="numeric">%</th></tr></thead><tbody>' + (bookRows || '<tr><td colspan="4">' + emptyState('배정된 책이 없습니다', '책 배정 화면에서 사용하는 책을 체크하세요.') + '</td></tr>') + '</tbody></table></div></section></div>' + progressUnitPanels + '<section class="panel"><div class="panel-head"><h3>숙제</h3></div><div class="table-wrap"><table><thead><tr><th>숙제</th><th>기한</th><th>상태</th><th>메모</th></tr></thead><tbody>' + (homeworkRows || '<tr><td colspan="4">' + emptyState('숙제가 없습니다', '숙제 탭에서 추가하세요.') + '</td></tr>') + '</tbody></table></div></section><section class="panel"><div class="panel-head"><h3>상담/평가 이력</h3></div><div class="panel-body"><form class="form-grid students" id="consultationForm"><input type="hidden" name="studentId" value="' + student.id + '"><input class="field" type="date" name="date" value="' + todayString() + '"><select class="select" name="type"><option>상담 메모</option><option>학부모 연락</option><option>학습 관찰</option><option>수업 특이사항</option></select><input class="field" name="content" placeholder="상담 또는 관찰 내용을 입력" required><button class="primary-button" type="submit">추가</button></form></div><div class="panel-body timeline-list">' + (historyRows || emptyState('이력이 없습니다', '상담 메모를 추가하거나 AI 평가를 저장하세요.')) + '</div></section>' : emptyState('학생이 없습니다', '학생을 먼저 추가하세요.')) + '</div>';
+    VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>학생 상세</h2><p>' + (student ? escapeHtml(student.name) : '학생을 선택하세요') + '</p></div><div class="student-search-tools detail-student-tools"><select class="select" id="detailTeacherFilter">' + teacherOptions(ui.detailTeacherId, true, true) + '</select>' + detailStudentPicker + '</div></div>' + (student ? '<div class="detail-grid"><section class="panel"><div class="panel-head"><h3>기본 정보</h3></div><div class="table-wrap"><table><tbody><tr><th>학생</th><td>' + escapeHtml(student.name) + '</td></tr><tr><th>선생님</th><td>' + escapeHtml(teacherNamesForStudent(student)) + '</td></tr><tr><th>메모</th><td>' + escapeHtml(student.memo || '') + '</td></tr><tr><th>진도</th><td>' + summary.done + '/' + summary.total + ' · ' + rate + '%</td></tr></tbody></table></div></section><section class="panel"><div class="panel-head"><h3>책별 진도</h3></div><div class="table-wrap"><table><thead><tr><th>책</th><th class="numeric">완료/전체</th><th>진도</th><th class="numeric">%</th></tr></thead><tbody>' + (bookRows || '<tr><td colspan="4">' + emptyState('배정된 책이 없습니다', '책 배정 화면에서 사용하는 책을 체크하세요.') + '</td></tr>') + '</tbody></table></div></section></div>' + progressUnitPanels + '<section class="panel"><div class="panel-head"><h3>숙제</h3></div><div class="table-wrap"><table><thead><tr><th>숙제</th><th>기한</th><th>상태</th><th>메모</th></tr></thead><tbody>' + (homeworkRows || '<tr><td colspan="4">' + emptyState('숙제가 없습니다', '숙제 탭에서 추가하세요.') + '</td></tr>') + '</tbody></table></div></section><section class="panel"><div class="panel-head"><h3>상담/평가 이력</h3></div><div class="panel-body"><form class="form-grid students" id="consultationForm"><input type="hidden" name="studentId" value="' + student.id + '"><input class="field" type="date" name="date" value="' + todayString() + '"><select class="select" name="type"><option>상담 메모</option><option>학부모 연락</option><option>학습 관찰</option><option>수업 특이사항</option></select><input class="field" name="content" placeholder="상담 또는 관찰 내용을 입력" required><button class="primary-button" type="submit">추가</button></form></div><div class="panel-body timeline-list">' + (historyRows || emptyState('이력이 없습니다', '상담 메모를 추가하거나 AI 평가를 저장하세요.')) + '</div></section>' : emptyState(state.students.length ? '학생을 선택하세요' : '학생이 없습니다', state.students.length ? '위 검색창에 이름이나 초성을 입력하세요.' : '학생을 먼저 추가하세요.')) + '</div>';
   }
 
   function renderDashboard() {
@@ -3127,7 +3133,7 @@
   function renderAssignments() {
     var visibleStudents = studentsByTeacher(ui.assignmentTeacherId);
     var searchedStudents = visibleStudents.filter(function (student) { return studentMatchesSearch(student, ui.assignmentStudentQuery); });
-    if (!ui.selectedStudentId || !getStudent(ui.selectedStudentId) || !teacherMatches(getStudent(ui.selectedStudentId), ui.assignmentTeacherId)) ui.selectedStudentId = searchedStudents[0] ? searchedStudents[0].id : (visibleStudents[0] ? visibleStudents[0].id : null);
+    if (!ui.selectedStudentId || !getStudent(ui.selectedStudentId) || !teacherMatches(getStudent(ui.selectedStudentId), ui.assignmentTeacherId)) ui.selectedStudentId = null;
     var selectedStudent = getStudent(ui.selectedStudentId);
     var studentButtons = visibleStudents.map(function (student) {
       var count = activeAssignments().filter(function (a) { return a.studentId === student.id; }).length;
@@ -3143,8 +3149,8 @@
       var student = getStudent(assignment.studentId); var book = getBook(assignment.bookId); var totals = assignmentTotals(assignment);
       return '<tr><td data-label="선생님">' + escapeHtml(teacherNamesForStudent(student)) + '</td><td data-label="학생">' + escapeHtml(student.name) + '</td><td data-label="과목">' + bookSubjectLabel(book.subject) + '</td><td data-label="책">' + escapeHtml(book.name) + '</td><td data-label="전체" class="numeric">' + totals.total + '</td><td data-label="완료" class="numeric">' + totals.done + '</td><td data-label="진도">' + renderProgressBar(totals.rate) + '</td><td data-label="진도율" class="numeric">' + totals.rate + '%</td></tr>';
     }).join('');
-    var checksEmptyTitle = state.books.length ? '이 폴더에 책이 없습니다' : '책이 없습니다';
-    var checksEmptyBody = state.books.length ? '다른 과목 폴더를 열거나 책 화면에서 과목을 지정하세요.' : '책 화면에서 추가하세요.';
+    var checksEmptyTitle = selectedStudent ? (state.books.length ? '이 폴더에 책이 없습니다' : '책이 없습니다') : '학생을 선택하세요';
+    var checksEmptyBody = selectedStudent ? (state.books.length ? '다른 과목 폴더를 열거나 책 화면에서 과목을 지정하세요.' : '책 화면에서 추가하세요.') : '왼쪽에서 학생 이름을 선택하거나 검색하세요.';
     var assignmentStudentEmpty = '<div id="assignmentStudentSearchEmpty" ' + (searchedStudents.length ? 'hidden' : '') + '>' + emptyState(ui.assignmentStudentQuery ? '검색 결과가 없습니다' : '학생이 없습니다', ui.assignmentStudentQuery ? '다른 이름이나 초성으로 검색해보세요.' : '학생 화면에서 담당 선생님을 지정하세요.') + '</div>';
     VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>책 배정</h2><p>' + activeAssignmentsByTeacher(ui.assignmentTeacherId).length + '건</p></div><div class="toolbar"><select class="select" id="assignmentTeacherFilter">' + teacherOptions(ui.assignmentTeacherId, true, true) + '</select></div></div><div class="assignment-layout"><aside class="panel"><div class="panel-head"><h3>학생</h3><span class="muted"><span id="assignmentStudentVisibleCount">' + searchedStudents.length + '</span>/' + visibleStudents.length + '명</span></div><div class="panel-body assignment-student-panel"><input class="field student-search-input" id="assignmentStudentSearchInput" type="search" value="' + escapeHtml(ui.assignmentStudentQuery) + '" placeholder="학생 이름 또는 초성" aria-label="책 배정 학생 이름 또는 초성 검색"><div class="student-list">' + studentButtons + assignmentStudentEmpty + '</div></div></aside><section class="panel"><div class="panel-head"><div><h3>' + (selectedStudent ? escapeHtml(selectedStudent.name) : '책') + '</h3><span class="muted">과목 폴더에서 사용할 책을 체크하세요.</span></div></div><div class="panel-body assignment-book-selector">' + bookSubjectFolders(ui.assignmentBookSubjectId, 'select-assignment-book-subject') + '<div class="book-check-grid">' + (checks || emptyState(checksEmptyTitle, checksEmptyBody)) + '</div></div></section></div><section class="panel"><div class="panel-head"><h3>배정 목록</h3></div><div class="table-wrap assignment-table-wrap"><table class="assignment-table"><thead><tr><th>선생님</th><th>학생</th><th>과목</th><th>책</th><th class="numeric">전체</th><th class="numeric">완료</th><th>진도</th><th class="numeric">%</th></tr></thead><tbody>' + (activeRows || '<tr><td colspan="8">' + emptyState('배정된 책이 없습니다', '학생을 선택하고 사용하는 책을 체크하세요.') + '</td></tr>') + '</tbody></table></div></section></div>';
   }
@@ -3316,7 +3322,7 @@
   }
 
   function renderProgress() {
-    if (!ui.progressStudentId || !getStudent(ui.progressStudentId)) ui.progressStudentId = state.students[0] ? state.students[0].id : null;
+    if (!ui.progressStudentId || !getStudent(ui.progressStudentId)) ui.progressStudentId = null;
     var assignedBooks = assignedBooksForStudent(ui.progressStudentId);
     if (!assignedBooks.some(function (book) { return book.id === ui.progressBookId; })) {
       ui.progressBookId = assignedBooks[0] ? assignedBooks[0].id : null;
@@ -3344,7 +3350,7 @@
     }
     var nextIncompleteUnit = firstIncompleteUnit(selectedAssignment, selectedBook);
     var selectedTotals = selectedAssignment ? assignmentTotals(selectedAssignment) : { done: 0, total: 0, rate: 0 };
-    var scopeText = selectedStudent && selectedBook ? selectedStudent.name + ' 학생 · ' + selectedBook.name + ' · ' + selectedTotals.done + '/' + selectedTotals.total + '단원 완료 · ' + selectedTotals.rate + '%' : (selectedStudent ? selectedStudent.name + ' 학생 · 배정된 책이 없습니다.' : '학생이 없습니다.');
+    var scopeText = selectedStudent && selectedBook ? selectedStudent.name + ' 학생 · ' + selectedBook.name + ' · ' + selectedTotals.done + '/' + selectedTotals.total + '단원 완료 · ' + selectedTotals.rate + '%' : (selectedStudent ? selectedStudent.name + ' 학생 · 배정된 책이 없습니다.' : '학생을 선택하세요.');
     var progressQuery = ui.progressQuery.trim().toLowerCase();
     var visibleSearchRows = 0;
     var limitProgressRows = ui.progressStatus === 'todo' && ui.progressUnit === 'all' && !progressQuery;
@@ -3387,7 +3393,7 @@
   function renderQuick() {
     var visibleStudents = studentsByTeacher(ui.quickTeacherId);
     if (!visibleStudents.some(function (student) { return student.id === ui.quickStudentId; })) {
-      ui.quickStudentId = visibleStudents[0] ? visibleStudents[0].id : null;
+      ui.quickStudentId = null;
       ui.quickBookId = 'all';
     }
     var selectedStudent = getStudent(ui.quickStudentId);
@@ -3422,8 +3428,8 @@
       }
       return '<tr><td>' + escapeHtml(book.name) + '</td>' + cells.join('') + '<td class="numeric">' + totals.done + '/' + totals.total + '</td><td class="numeric">' + totals.rate + '%</td></tr>';
     }).join('');
-    var quickScopeText = selectedStudent ? selectedStudent.name + ' 학생 · 배정 책 ' + studentAssignments.length + '권' : '선택할 학생이 없습니다';
-    var quickStudentPicker = '<div class="stacked-field quick-student-picker"><span>학생 검색</span><input class="field student-search-input" id="quickStudentSearchInput" type="search" value="' + escapeHtml(ui.quickStudentQuery) + '" placeholder="이름 또는 초성 검색" autocomplete="off" aria-label="빠른 체크 학생 검색"><div class="quick-current-student"><button type="button" class="icon-button" data-action="quick-previous-student" title="이전 학생" aria-label="이전 학생" ' + (selectedStudentIndex <= 0 ? 'disabled' : '') + '>&#8249;</button><strong>' + escapeHtml(selectedStudent ? selectedStudent.name : '학생 없음') + '</strong><button type="button" class="icon-button" data-action="quick-next-student" title="다음 학생" aria-label="다음 학생" ' + (selectedStudentIndex < 0 || selectedStudentIndex >= visibleStudents.length - 1 ? 'disabled' : '') + '>&#8250;</button></div><div class="quick-student-results" id="quickStudentSearchResults" ' + (quickSearchQuery ? '' : 'hidden') + '>' + quickStudentButtons + '<span class="quick-student-empty" id="quickStudentSearchEmpty" ' + (quickSearchMatches.length ? 'hidden' : '') + '>검색 결과가 없습니다.</span></div></div>';
+    var quickScopeText = selectedStudent ? selectedStudent.name + ' 학생 · 배정 책 ' + studentAssignments.length + '권' : '학생을 선택하세요';
+    var quickStudentPicker = '<div class="stacked-field quick-student-picker"><span>학생 검색</span><input class="field student-search-input" id="quickStudentSearchInput" type="search" value="' + escapeHtml(ui.quickStudentQuery) + '" placeholder="이름 또는 초성 검색" autocomplete="off" aria-label="빠른 체크 학생 검색"><div class="quick-current-student"><button type="button" class="icon-button" data-action="quick-previous-student" title="이전 학생" aria-label="이전 학생" ' + (selectedStudentIndex <= 0 ? 'disabled' : '') + '>&#8249;</button><strong>' + escapeHtml(selectedStudent ? selectedStudent.name : '선택 없음') + '</strong><button type="button" class="icon-button" data-action="quick-next-student" title="다음 학생" aria-label="다음 학생" ' + (selectedStudentIndex < 0 || selectedStudentIndex >= visibleStudents.length - 1 ? 'disabled' : '') + '>&#8250;</button></div><div class="quick-student-results" id="quickStudentSearchResults" ' + (quickSearchQuery ? '' : 'hidden') + '>' + quickStudentButtons + '<span class="quick-student-empty" id="quickStudentSearchEmpty" ' + (quickSearchMatches.length ? 'hidden' : '') + '>검색 결과가 없습니다.</span></div></div>';
     VIEW.innerHTML = '<div class="view-stack"><div class="section-head"><div><h2>빠른 체크</h2><p>' + escapeHtml(quickScopeText) + '</p></div></div><section class="panel"><div class="panel-body quick-controls"><label class="stacked-field"><span>선생님</span><select class="select" id="quickTeacherFilter">' + teacherOptions(ui.quickTeacherId, true, true) + '</select></label>' + quickStudentPicker + '<label class="stacked-field"><span>책</span><select class="select" id="quickBookFilter" ' + (studentAssignments.length ? '' : 'disabled') + '>' + quickBookChoices + '</select></label></div><div class="table-wrap"><table class="quick-table"><thead><tr><th>책</th>' + headers.join('') + '<th>완료</th><th>%</th></tr></thead><tbody>' + (rows || '<tr><td colspan="' + (cappedUnits + 3) + '">' + emptyState(selectedStudent ? '빠르게 체크할 책이 없습니다' : '학생을 선택할 수 없습니다', selectedStudent ? '책 배정 화면에서 이 학생이 사용하는 책을 체크하세요.' : '학생 화면에서 학생을 추가하거나 담당 선생님을 확인하세요.') + '</td></tr>') + '</tbody></table></div></section></div>';
   }
 
@@ -3761,11 +3767,13 @@
     state.evaluationQueue = (state.evaluationQueue || []).map(function (item) { item.studentIds = (item.studentIds || []).filter(function (id) { return id !== studentId; }); return item; });
     if (state.consultationSettings) delete state.consultationSettings[studentId];
     Object.keys(state.progress).forEach(function (key) { if (assignmentIds.some(function (id) { return key.indexOf(id + ':') === 0; })) delete state.progress[key]; });
-    if (ui.selectedStudentId === studentId) ui.selectedStudentId = state.students[0] ? state.students[0].id : null;
+    if (ui.selectedStudentId === studentId) ui.selectedStudentId = null;
+    if (ui.detailStudentId === studentId) ui.detailStudentId = null;
+    if (ui.homeworkFormStudentId === studentId) ui.homeworkFormStudentId = null;
     ui.homeworkExpandedStudentIds = ui.homeworkExpandedStudentIds.filter(function (id) { return id !== studentId; });
-    if (ui.progressStudentId === studentId) { ui.progressStudentId = state.students[0] ? state.students[0].id : null; ui.progressBookId = null; ui.progressUnit = 'all'; ui.progressStatus = 'todo'; ui.progressQuery = ''; ui.progressVisibleLimit = 5; ui.progressRangeStart = 1; ui.progressRangeEnd = 1; ui.progressLastBulk = null; ui.expandedProgressKey = null; }
-    if (ui.quickStudentId === studentId) { ui.quickStudentId = firstStudentIdForTeacher(ui.quickTeacherId); ui.quickStudentQuery = ''; ui.quickBookId = 'all'; }
-    if (ui.aiStudentId === studentId) ui.aiStudentId = state.students[0] ? state.students[0].id : null;
+    if (ui.progressStudentId === studentId) { ui.progressStudentId = null; ui.progressBookId = null; ui.progressUnit = 'all'; ui.progressStatus = 'todo'; ui.progressQuery = ''; ui.progressVisibleLimit = 5; ui.progressRangeStart = 1; ui.progressRangeEnd = 1; ui.progressLastBulk = null; ui.expandedProgressKey = null; }
+    if (ui.quickStudentId === studentId) { ui.quickStudentId = null; ui.quickStudentQuery = ''; ui.quickBookId = 'all'; }
+    if (ui.aiStudentId === studentId) ui.aiStudentId = null;
     saveState(); render();
   }
 
@@ -3820,7 +3828,7 @@
     file.text().then(function (text) {
       var imported = JSON.parse(text);
       if (!imported.students || !imported.books || !imported.assignments || !imported.progress) { alert('가져올 수 없는 파일입니다.'); return; }
-      state = normalizeState(imported); saveState(); ui.selectedStudentId = firstStudentIdForTeacher(ui.assignmentTeacherId); ui.progressStudentId = state.students[0] ? state.students[0].id : null; ui.progressBookId = null; ui.progressUnit = 'all'; ui.progressStatus = 'todo'; ui.progressQuery = ''; ui.progressVisibleLimit = 5; ui.progressRangeStart = 1; ui.progressRangeEnd = 1; ui.progressLastBulk = null; ui.expandedProgressKey = null; ui.aiStudentId = firstStudentIdForTeacher(ui.aiTeacherId); ui.aiWritingTeacherId = null; render();
+      state = normalizeState(imported); saveState(); ui.selectedStudentId = null; ui.detailStudentId = null; ui.homeworkFormStudentId = null; ui.progressStudentId = null; ui.progressBookId = null; ui.progressUnit = 'all'; ui.progressStatus = 'todo'; ui.progressQuery = ''; ui.progressVisibleLimit = 5; ui.progressRangeStart = 1; ui.progressRangeEnd = 1; ui.progressLastBulk = null; ui.expandedProgressKey = null; ui.quickStudentId = null; ui.aiStudentId = null; ui.aiWritingTeacherId = null; render();
     }).catch(function () { alert('파일을 읽지 못했습니다.'); });
   }
 
@@ -3863,8 +3871,8 @@
     if (target.id === 'alertsTeacherFilter') { ui.alertsTeacherId = target.value; render(); }
     if (target.id === 'dashboardTeacherFilter') { ui.dashboardTeacherId = target.value; render(); }
     if (target.id === 'studentTeacherFilter') { ui.studentTeacherId = target.value; render(); }
-    if (target.id === 'assignmentTeacherFilter') { ui.assignmentTeacherId = target.value; render(); }
-    if (target.id === 'detailTeacherFilter') { ui.detailTeacherId = target.value; ui.detailStudentId = firstStudentIdForTeacher(ui.detailTeacherId); ui.detailStudentQuery = ''; ui.detailStudentSearchOpen = false; render(); }
+    if (target.id === 'assignmentTeacherFilter') { ui.assignmentTeacherId = target.value; ui.selectedStudentId = null; render(); }
+    if (target.id === 'detailTeacherFilter') { ui.detailTeacherId = target.value; ui.detailStudentId = null; ui.detailStudentQuery = ''; ui.detailStudentSearchOpen = false; render(); }
     if (target.id === 'homeworkTeacherFilter') { ui.homeworkTeacherId = target.value; ui.homeworkStudentId = 'all'; ui.homeworkFormStudentId = null; ui.homeworkStudentQuery = ''; ui.homeworkFormBookId = null; render(); }
     if (target.id === 'homeworkStudentFilter') { ui.homeworkStudentId = target.value; render(); }
     if (target.id === 'homeworkBookFilter') { ui.homeworkBookId = target.value; render(); }
@@ -3893,9 +3901,9 @@
     if (target.id === 'progressHomeworkStartUnit') { ui.progressHomeworkStartUnit = Number(target.value || 1); if (ui.progressHomeworkEndUnit < ui.progressHomeworkStartUnit) { ui.progressHomeworkEndUnit = ui.progressHomeworkStartUnit; var progressHomeworkEnd = document.querySelector('#progressHomeworkEndUnit'); if (progressHomeworkEnd) progressHomeworkEnd.value = String(ui.progressHomeworkEndUnit); } setProgressHomeworkNotice(''); }
     if (target.id === 'progressHomeworkEndUnit') { ui.progressHomeworkEndUnit = Math.max(ui.progressHomeworkStartUnit, Number(target.value || ui.progressHomeworkStartUnit)); setProgressHomeworkNotice(''); }
     if (target.id === 'progressHomeworkDueDate') { ui.progressHomeworkDueDate = target.value; setProgressHomeworkNotice(''); }
-    if (target.id === 'quickTeacherFilter') { ui.quickTeacherId = target.value; ui.quickStudentId = firstStudentIdForTeacher(ui.quickTeacherId); ui.quickStudentQuery = ''; ui.quickBookId = 'all'; render(); }
+    if (target.id === 'quickTeacherFilter') { ui.quickTeacherId = target.value; ui.quickStudentId = null; ui.quickStudentQuery = ''; ui.quickBookId = 'all'; render(); }
     if (target.id === 'quickBookFilter') { ui.quickBookId = target.value; render(); }
-    if (target.id === 'aiTeacherFilter') { ui.aiTeacherId = target.value; ui.aiStudentId = firstStudentIdForTeacher(ui.aiTeacherId); ui.aiWritingTeacherId = null; ui.aiBatchFailures = []; setAiStatus(''); renderAiEvaluation(); }
+    if (target.id === 'aiTeacherFilter') { ui.aiTeacherId = target.value; ui.aiStudentId = null; ui.aiWritingTeacherId = null; ui.aiBatchFailures = []; setAiStatus(''); renderAiEvaluation(); }
     if (target.id === 'aiStudentSelect') { ui.aiStudentId = target.value; ui.aiWritingTeacherId = null; setAiStatus(''); renderAiEvaluation(); }
     if (target.id === 'aiWritingTeacherSelect') { ui.aiWritingTeacherId = target.value; setAiStatus(''); renderAiEvaluation(); }
     if (target.id === 'aiProviderSelect') { ui.aiProvider = normalizeAiProvider(target.value); state.aiSettings.defaultProvider = ui.aiProvider; ui.aiDraftMeta = null; saveState(); setAiStatus(aiProviderLabel(ui.aiProvider) + ' 작성 엔진을 선택했습니다.'); renderAiEvaluation(); }
@@ -4030,7 +4038,7 @@
     if (target.id === 'clearAiKeywords') clearAiKeywords();
     if (action === 'delete-evaluation') deleteEvaluation(target.dataset.evaluationId);
     if (target.id === 'refreshEvaluationQueue') refreshTodayEvaluationQueues();
-    if (target.id === 'resetData') { if (!confirm('초기 상태로 되돌릴까요?')) return; state = seedState(); saveState(); ui.selectedStudentId = state.students[0] ? state.students[0].id : null; ui.progressStudentId = state.students[0] ? state.students[0].id : null; ui.progressBookId = null; ui.progressUnit = 'all'; ui.progressStatus = 'todo'; ui.progressQuery = ''; ui.progressVisibleLimit = 5; ui.progressRangeStart = 1; ui.progressRangeEnd = 1; ui.progressLastBulk = null; ui.expandedProgressKey = null; ui.homeworkExpandedStudentIds = []; ui.quickStudentId = state.students[0] ? state.students[0].id : null; ui.quickStudentQuery = ''; ui.quickBookId = 'all'; ui.aiStudentId = state.students[0] ? state.students[0].id : null; ui.aiWritingTeacherId = null; ui.aiDraft = ''; ui.aiKeywords = ''; render(); }
+    if (target.id === 'resetData') { if (!confirm('초기 상태로 되돌릴까요?')) return; state = seedState(); saveState(); ui.selectedStudentId = null; ui.detailStudentId = null; ui.homeworkFormStudentId = null; ui.progressStudentId = null; ui.progressBookId = null; ui.progressUnit = 'all'; ui.progressStatus = 'todo'; ui.progressQuery = ''; ui.progressVisibleLimit = 5; ui.progressRangeStart = 1; ui.progressRangeEnd = 1; ui.progressLastBulk = null; ui.expandedProgressKey = null; ui.homeworkExpandedStudentIds = []; ui.quickStudentId = null; ui.quickStudentQuery = ''; ui.quickBookId = 'all'; ui.aiStudentId = null; ui.aiWritingTeacherId = null; ui.aiDraft = ''; ui.aiKeywords = ''; render(); }
   });
 
   document.addEventListener('input', function (event) {
